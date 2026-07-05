@@ -1,0 +1,959 @@
+// ClinicOS Prisma Schema
+// Multi-tenant SaaS for clinic chains
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// MIGRATION 00003: APPOINTMENTS DOUBLE-BOOKING FIX
+//
+// Drop old Prisma-generated unique index, create PostgreSQL partial index:
+//   DROP INDEX IF EXISTS "appointments_doctor_id_slot_start_key";
+//   CREATE UNIQUE INDEX "unique_doctor_slot_active"
+//     ON appointments (doctor_id, slot_start) WHERE status != 'CANCELLED';
+//
+// This allows re-booking of CANCELLED slots while preventing double-booking
+// of active slots.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum ClinicStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+  DELETED
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+  PENDING
+}
+
+enum UserRoleType {
+  MASTER        // Org-level owner (chain/company) — set via User.isOrgOwner, not UserClinicRole
+  SUB_MASTER    // Clinic-level owner
+  DOCTOR
+  NURSE
+  PHARMACIST
+  RECEPTIONIST
+  HR            // Human Resources — staff management, attendance, payroll
+}
+
+enum AppointmentType {
+  SCHEDULED
+  WALK_IN
+}
+
+enum AppointmentStatus {
+  BOOKED
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+}
+
+enum StockMovementType {
+  SALE
+  RESTOCK
+  ADJUSTMENT
+  WRITE_OFF
+  RETURN
+}
+
+enum ReminderChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum ReminderStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  CANCELLED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum DueStatus {
+  PAID
+  PARTIAL
+  DUE
+  WAIVED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  INSURANCE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORGANIZATIONS (Master/Chain Owner)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Organization {
+  id        String     @id @default(uuid())
+  name      String
+  country   String     // ISO country code
+  plan      String?    @default("basic")
+  status    OrgStatus  @default(PENDING)
+  logoUrl   String?
+  metadata  Json?      // Flexible field for additional org data
+
+  // Relations
+  clinics   Clinic[]
+  users     User[]
+  auditLogs AuditLog[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("organizations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CLINICS (Branches)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Clinic {
+  id              String        @id @default(uuid())
+  orgId           String        @map("org_id")
+  name            String
+  address         String?
+  city            String?
+  state           String?
+  country         String        @default("IN") @map("country")
+  postalCode      String?       @map("postal_code")
+  phone           String?
+  email           String?
+  timezone        String        @default("Asia/Kolkata")
+  currency        String        @default("INR")
+  locale          String        @default("en-IN") @map("locale")
+
+  // Medicine DB for this clinic
+  medicineDbCountry String?     @map("medicine_db_country")
+
+  // White-label branding
+  logoUrl         String?       @map("logo_url")
+  bannerUrl       String?       @map("banner_url")
+  accentColor     String?       @map("accent_color")
+
+  // Landing page slug
+  landingPageSlug String?       @map("landing_page_slug")
+
+  // Working hours (JSON for flexibility)
+  workingHours    Json?        @map("working_hours")
+
+  status          ClinicStatus  @default(ACTIVE)
+
+  // Relations
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users           UserClinicRole[]
+  patients        Patient[]
+  appointments    Appointment[]
+  inventoryItems  InventoryItem[]
+  prescriptions   Prescription[]
+  dues            Due[]
+  reminders       Reminder[]
+  attendance      StaffAttendance[]
+  schedules       StaffSchedule[]
+  auditLogs       AuditLog[]
+  stockMovements  StockMovement[]
+  invites        Invite[]
+
+  // Soft delete
+  deletedAt       DateTime?     @map("deleted_at")
+
+  // Timestamps
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@index([status])
+  @@map("clinics")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String      @id @default(uuid())
+  orgId         String      @map("org_id")
+  email         String?     @unique // Nullable for phone-only accounts
+  phone         String?     @unique
+  passwordHash  String?     @map("password_hash")
+  name          String
+  avatarUrl     String?     @map("avatar_url")
+
+  // Org-level flag — true = this user is the Master/owner of this org
+  // MASTER role is granted via this flag, NOT via UserClinicRole
+  // This bypasses clinic-level checks in RBAC (can access all clinics in org)
+  isOrgOwner    Boolean     @default(false) @map("is_org_owner")
+
+  // 2FA (⚠️ twoFactorSecret MUST be encrypted at rest — use AES-256 or similar.
+// A plaintext TOTP secret means anyone with DB access can generate valid 2FA codes.)
+  twoFactorEnabled Boolean   @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String?  @map("two_factor_secret")
+
+  // Password reset (token is hashed, not plaintext)
+  passwordResetToken    String?   @map("password_reset_token") // Hash of reset token
+  passwordResetExpiry   DateTime? @map("password_reset_expiry")
+
+  status        UserStatus  @default(PENDING)
+
+  // Last login tracking
+  lastLoginAt   DateTime?   @map("last_login_at")
+
+  // Token rotation tracking (for refresh token family detection)
+  lastRefreshTokenId String? @map("last_refresh_token_id")
+
+  // Relations
+  org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clinicRoles   UserClinicRole[]
+  doctorVisits  PatientVisit[] @relation("DoctorVisits")
+  createdVisits PatientVisit[] @relation("CreatedVisits")
+  doctorAppointments Appointment[] @relation("DoctorAppointments")
+  createdAppointments  Appointment[] @relation("CreatedByAppointments")
+  prescriptions Prescription[]
+  stockMovements StockMovement[]
+  dues          Due[]
+  attendance    StaffAttendance[]
+  schedules     StaffSchedule[]
+  auditLogs     AuditLog[]
+
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@index([status])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// USER CLINIC ROLES (Many-to-Many: User can work at multiple clinics)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UserClinicRole {
+  id        String        @id @default(uuid())
+  userId    String        @map("user_id")
+  clinicId  String        @map("clinic_id")
+  role      UserRoleType
+  isPrimary Boolean       @default(false) @map("is_primary")
+  status    UserStatus    @default(ACTIVE)
+
+  // Permissions can be extended via JSON metadata
+  metadata  Json?
+
+  // Relations
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic    Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, clinicId])
+  @@index([userId])
+  @@index([clinicId])
+  @@index([role])
+  @@map("user_clinic_roles")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Patient {
+  id            String    @id @default(uuid())
+  clinicId      String    @map("clinic_id")
+  orgId         String    @map("org_id")
+
+  // Basic info
+  name          String
+  email         String?
+  phone         String?
+  dateOfBirth   DateTime? @map("date_of_birth")
+
+  gender        Gender?
+
+  // Medical info
+  bloodGroup    String?   @map("blood_group")
+  allergies     String[]
+  medicalHistory String?   @map("medical_history")
+
+  // Contact info
+  address       String?
+  city          String?
+  state         String?
+  postalCode    String?   @map("postal_code")
+  country       String?   @default("IN")
+
+  // Tags for segmentation
+  tags          String[]
+
+  // Consent tracking
+  whatsappConsent Boolean @default(false) @map("whatsapp_consent")
+  smsConsent      Boolean @default(false) @map("sms_consent")
+
+  // Relations
+  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  visits        PatientVisit[]
+  appointments  Appointment[]
+  prescriptions Prescription[]
+  dues          Due[]
+  reminders     Reminder[]
+
+  // Soft delete
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Timestamps
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  createdById   String?   @map("created_by_id")
+
+  @@index([clinicId])
+  @@index([orgId])
+  @@index([phone])
+  @@map("patients")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT VISITS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PatientVisit {
+  id        String   @id @default(uuid())
+  patientId String   @map("patient_id")
+  clinicId  String   @map("clinic_id")
+  orgId     String   @map("org_id")
+
+  // Visit details
+  visitDate DateTime @default(now()) @map("visit_date")
+  type     String?
+
+  // Vitals (flexible JSON)
+  vitals    Json?
+
+  // Clinical notes
+  chiefComplaint String? @map("chief_complaint")
+  diagnosis      String?
+  notes          String?
+
+  // Doctor
+  doctorId       String   @map("doctor_id")
+
+  // Who created this record
+  createdById    String   @map("created_by_id")
+
+  // Relations
+  patient        Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor         User    @relation("DoctorVisits", fields: [doctorId], references: [id])
+  createdBy     User    @relation("CreatedVisits", fields: [createdById], references: [id])
+  prescriptions Prescription[]
+  appointments   Appointment[]
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([patientId])
+  @@index([clinicId])
+  @@index([orgId])        // Index for org-wide queries
+  @@index([doctorId])
+  @@index([visitDate])
+  @@map("patient_visits")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// APPOINTMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Appointment {
+  id            String            @id @default(uuid())
+  clinicId      String            @map("clinic_id")
+  orgId         String            @map("org_id")
+  patientId     String            @map("patient_id")
+  doctorId      String            @map("doctor_id")
+
+  // Scheduling
+  slotStart     DateTime          @map("slot_start")
+  slotEnd       DateTime          @map("slot_end")
+  type          AppointmentType   @default(SCHEDULED)
+  status        AppointmentStatus  @default(BOOKED)
+
+  // Visit reference (FIXED: added proper relation)
+  visitId       String?           @map("visit_id")
+  visit         PatientVisit?     @relation(fields: [visitId], references: [id], onDelete: SetNull)
+
+  // Booking details
+  notes         String?
+  isNewPatient  Boolean           @default(false) @map("is_new_patient")
+
+  // Queue position for walk-ins
+  queuePosition Int?              @map("queue_position")
+
+  // Who created this
+  createdById   String            @map("created_by_id")
+
+  // Relations
+  clinic        Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User             @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  createdBy     User             @relation("CreatedByAppointments", fields: [createdById], references: [id])
+  reminders     Reminder[]
+
+  // Soft delete
+  cancelledAt   DateTime?        @map("cancelled_at")
+  cancelledById String?          @map("cancelled_by_id")
+
+  // Timestamps
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+
+  // Double-booking prevention via raw SQL partial index — see migration 00003_appointments_fix
+  // The partial index allows re-booking cancelled slots:
+  // CREATE UNIQUE INDEX unique_doctor_slot_active ON appointments (doctor_id, slot_start) WHERE status != 'CANCELLED';
+  @@index([clinicId])
+  @@index([orgId])
+  @@index([patientId])
+  @@index([doctorId])
+  @@index([status])
+  @@index([slotStart])
+  @@map("appointments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MEDICINES MASTER (reference data - not tenant-scoped)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MedicineMaster {
+  id            String   @id @default(uuid())
+  country       String
+
+  // Drug info
+  genericName   String   @map("generic_name")
+  brandNames    String[] @map("brand_names")
+  composition   String?
+  strength      String?
+
+  dosages       Json     // e.g., ["tablet", "capsule", "syrup"]
+
+  // Category
+  category      String?
+  subCategory   String?  @map("sub_category")
+
+  requiresPrescription Boolean @default(false) @map("requires_prescription")
+
+  // Relations (FIXED: removed @relation(onDelete: SetNull) - must be on child side)
+  inventoryItems    InventoryItem[]
+  prescriptionItems PrescriptionItem[]
+
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([country])
+  @@index([genericName])
+  @@map("medicines_master")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INVENTORY ITEMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model InventoryItem {
+  id            String    @id @default(uuid())
+  clinicId      String    @map("clinic_id")
+  orgId         String    @map("org_id")
+
+  // Reference to master medicine (nullable for custom items)
+  medicineId    String?   @map("medicine_id")
+  customName    String?   @map("custom_name")
+  customBrand   String?   @map("custom_brand")
+
+  // ⚠️  APP-LAYER VALIDATION REQUIRED:
+  // Both medicineId and customName are nullable, but an item cannot exist
+  // without one of them. Enforce in your API/service layer:
+  // CHECK (medicine_id IS NOT NULL OR custom_name IS NOT NULL)
+
+  // Batch tracking
+  batchNo       String?   @map("batch_no")
+  expiryDate    DateTime? @map("expiry_date")
+
+  // Stock levels
+  quantity      Int       @default(0)
+  reorderThreshold Int    @default(10) @map("reorder_threshold")
+
+  // Pricing
+  unitPrice     Decimal   @db.Decimal(12, 2) @map("unit_price")
+  mrp           Decimal?  @db.Decimal(12, 2)
+
+  // Item details
+  dosageForm    String?   @map("dosage_form")
+  strength      String?   @map("strength")
+
+  // Soft delete
+  deletedAt     DateTime? @map("deleted_at")
+
+  // Relations
+  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  medicine      MedicineMaster? @relation(fields: [medicineId], references: [id])
+  stockMovements StockMovement[]
+
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdById   String   @map("created_by_id")
+
+  @@index([clinicId])
+  @@index([medicineId])
+  @@index([expiryDate])
+  @@map("inventory_items")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STOCK MOVEMENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StockMovement {
+  id              String            @id @default(uuid())
+  clinicId        String            @map("clinic_id")
+  orgId           String            @map("org_id")
+  inventoryItemId String            @map("inventory_item_id")
+
+  type            StockMovementType
+  quantityDelta   Int               @map("quantity_delta")
+
+  // Reference
+  referenceType   String?           @map("reference_type")
+  referenceId     String?           @map("reference_id")
+
+  // Batch overrides
+  newBatchNo      String?           @map("new_batch_no")
+  newExpiryDate   DateTime?         @map("new_expiry_date")
+
+  notes           String?
+
+  performedById   String            @map("performed_by_id")
+  prescriptionId  String?           @map("prescription_id")
+
+  // Relations
+  clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  inventoryItem   InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  performedBy     User             @relation(fields: [performedById], references: [id])
+  prescription    Prescription?    @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+
+  // Timestamps
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  @@index([clinicId])
+  @@index([inventoryItemId])
+  @@index([orgId])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESCRIPTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Prescription {
+  id            String  @id @default(uuid())
+  clinicId      String  @map("clinic_id")
+  orgId         String  @map("org_id")
+  patientId     String  @map("patient_id")
+  doctorId      String  @map("doctor_id")
+  visitId       String? @map("visit_id")
+
+  notes         String?
+  signature     String?
+
+  status        String  @default("active")
+  cancelledAt   DateTime? @map("cancelled_at")
+  cancelledById String?   @map("cancelled_by_id")
+
+  // Relations
+  clinic        Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User       @relation(fields: [doctorId], references: [id])
+  visit         PatientVisit? @relation(fields: [visitId], references: [id])
+  items         PrescriptionItem[]
+  stockMovements StockMovement[]
+
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([clinicId])
+  @@index([orgId])        // Index for org-wide queries
+  @@index([patientId])
+  @@index([doctorId])
+  @@map("prescriptions")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRESCRIPTION ITEMS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PrescriptionItem {
+  id              String  @id @default(uuid())
+  prescriptionId  String  @map("prescription_id")
+
+  medicineId      String? @map("medicine_id")
+  customName      String? @map("custom_name")
+
+  dosage          String?
+  frequency       String?
+  duration        String?
+  instructions    String?
+
+  quantity        Int     @default(1)
+  unitPrice       Decimal? @db.Decimal(12, 2) @map("unit_price")
+  totalPrice      Decimal? @db.Decimal(12, 2) @map("total_price")
+
+  dispensed       Boolean @default(false)
+  dispensedQty    Int     @default(0) @map("dispensed_qty")
+
+  // Relations
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicine        MedicineMaster? @relation(fields: [medicineId], references: [id])
+
+  // Timestamps
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([prescriptionId])
+  @@map("prescription_items")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DUES (billing ledger)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Due {
+  id              String       @id @default(uuid())
+  clinicId        String       @map("clinic_id")
+  orgId           String       @map("org_id")
+  patientId       String       @map("patient_id")
+
+  // FIXED: Added proper relations for optional FKs
+  appointmentId   String?      @map("appointment_id")
+  prescriptionId  String?      @map("prescription_id")
+
+  totalAmount     Decimal      @db.Decimal(12, 2) @map("total_amount")
+  amountPaid      Decimal      @default(0) @db.Decimal(12, 2) @map("amount_paid")
+  amountDue       Decimal      @db.Decimal(12, 2) @map("amount_due")
+
+  paymentMethod   PaymentMethod? @map("payment_method")
+  paymentNotes    String?       @map("payment_notes")
+
+  status          DueStatus    @default(DUE)
+
+  recordedById    String       @map("recorded_by_id")
+
+  waivedAt        DateTime?    @map("waived_at")
+  waivedById      String?      @map("waived_by_id")
+  waiveReason     String?      @map("waive_reason")
+
+  // Relations
+  clinic          Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recordedBy      User         @relation(fields: [recordedById], references: [id])
+  // Note: appointmentId and prescriptionId are optional informational links.
+  // No @relation defined — handled via application-level joins with SetNull behavior.
+
+  // Timestamps
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  @@index([clinicId])
+  @@index([orgId])        // Index for org-wide queries
+  @@index([patientId])
+  @@index([status])
+  @@map("dues")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REMINDERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Reminder {
+  id            String             @id @default(uuid())
+  clinicId      String             @map("clinic_id")
+  orgId         String             @map("org_id")
+  patientId     String             @map("patient_id")
+  appointmentId String?            @map("appointment_id")
+
+  channel       ReminderChannel
+
+  templateId    String             @map("template_id")
+  templateData  Json?              @map("template_data")
+
+  scheduledAt   DateTime           @map("scheduled_at")
+  sentAt        DateTime?          @map("sent_at")
+  deliveredAt   DateTime?           @map("delivered_at")
+
+  status        ReminderStatus     @default(PENDING)
+
+  providerMessageId String?        @map("provider_message_id")
+  providerResponse  Json?          @map("provider_response")
+  errorMessage      String?        @map("error_message")
+
+  retryCount    Int     @default(0) @map("retry_count")
+  maxRetries    Int     @default(3)  @map("max_retries")
+
+  // Relations (FIXED: Added proper relations)
+  clinic        Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient       Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  // No relation for appointmentId - optional link, SetNull behavior:
+  // if an appointment is deleted, reminders stay but lose their link
+
+  // Timestamps
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([clinicId])
+  @@index([orgId])        // Index for org-wide queries
+  @@index([patientId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("reminders")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAFF ATTENDANCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StaffAttendance {
+  id         String           @id @default(uuid())
+  clinicId   String           @map("clinic_id")
+  orgId      String           @map("org_id")
+  userId     String           @map("user_id")
+  date       DateTime         @db.Date
+
+  checkIn    DateTime?        @map("check_in")
+  checkOut   DateTime?        @map("check_out")
+
+  status     AttendanceStatus @default(PRESENT)
+
+  notes      String?
+
+  // Relations
+  clinic     Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  @@unique([userId, clinicId, date])
+  @@index([clinicId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("staff_attendance")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STAFF SCHEDULES (availability slots)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model StaffSchedule {
+  id          String   @id @default(uuid())
+  clinicId    String   @map("clinic_id")
+  orgId       String   @map("org_id")
+  userId      String   @map("user_id")
+
+  dayOfWeek   Int      @map("day_of_week") // 0=Sunday, 6=Saturday
+
+  startTime   String   @map("start_time")  // "09:00"
+  endTime     String   @map("end_time")    // "17:00"
+
+  slotDuration Int     @default(30) @map("slot_duration")
+
+  isActive    Boolean  @default(true) @map("is_active")
+
+  specificDate DateTime? @map("specific_date") // Override for holidays
+
+  // Relations
+  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([clinicId])
+  @@index([orgId])
+  @@index([userId])
+  @@map("staff_schedules")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUDIT LOGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  clinicId    String?  @map("clinic_id")
+  userId      String?  @map("user_id")
+
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+
+  before      Json?
+  after       Json?
+
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+
+  metadata    Json?
+
+  // Relations
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clinic      Clinic?      @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([orgId])
+  @@index([clinicId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INVITES (magic link tokens)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Invite {
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
+  clinicId    String?   @map("clinic_id") // null for sub-master invites (clinic created first)
+
+  email       String?   @map("email")
+  phone       String?   @map("phone")
+
+  // Token is hashed before storage
+  tokenHash   String    @unique @map("token_hash")
+
+  // Role to assign when accepted
+  role        UserRoleType @map("role")
+
+  // User who sent the invite
+  invitedById String    @map("invited_by_id")
+
+  // Relations
+  clinic       Clinic?   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+
+  // Status
+  status      String    @default("pending") // pending, accepted, expired, cancelled
+  expiresAt   DateTime  @map("expires_at")
+
+  // Link to created user after acceptance
+  acceptedById String?  @map("accepted_by_id")
+
+  // Timestamps
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@index([tokenHash])
+  @@index([status])
+  @@map("invites")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REFRESH TOKENS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ⚠️ SECURITY: stores HASH of token, not raw value. Compare hash-to-hash on validation.
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  tokenHash   String   @unique @map("token_hash") // SHA-256 hash of the actual token
+  familyId    String   @map("family_id") // Same family = same login session, for rotation detection
+  expiresAt   DateTime @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+  deviceInfo  String?  @map("device_info")
+  ipAddress   String?  @map("ip_address")
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API KEYS (future integrations)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
+  clinicId    String?   @map("clinic_id")
+
+  name        String
+  keyHash     String    @map("key_hash")
+  keyPrefix   String    @map("key_prefix")
+
+  permissions Json
+
+  expiresAt   DateTime? @map("expires_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  lastUsedAt  DateTime? @map("last_used_at")
+
+  // Timestamps
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId])
+  @@map("api_keys")
+}
