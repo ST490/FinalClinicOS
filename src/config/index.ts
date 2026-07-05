@@ -114,6 +114,15 @@ export const config = {
   loginRateWindow: LOGIN_RATE_WINDOW,
   apiRateLimit: API_RATE_LIMIT,
   apiRateWindow: API_RATE_WINDOW,
+  twilio: {
+    accountSid: TWILIO_ACCOUNT_SID,
+    authToken: TWILIO_AUTH_TOKEN,
+    phoneNumber: TWILIO_PHONE_NUMBER,
+  },
+  whatsappBsp: {
+    apiKey: WHATSAPP_BSP_API_KEY,
+    webhookSecret: WHATSAPP_BSP_WEBHOOK_SECRET,
+  },
 };
 
 export default config;

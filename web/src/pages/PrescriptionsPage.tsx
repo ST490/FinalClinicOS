@@ -72,12 +72,18 @@ export default function PrescriptionsPage() {
         <div className="relative">
           <input value={drugName} onChange={e => handleDrugSearch(e.target.value)} placeholder="Search medication..."
             className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card" />
-          {suggestions.length > 0 && (
+          {(suggestions.length > 0 || drugName) && (
             <div className="absolute z-50 w-full mt-1 bg-surface-card rounded-lg border border-border shadow-lg max-h-48 overflow-y-auto">
               {suggestions.map(s => (
                 <button key={s} type="button" onClick={() => { setDrugName(s); setSuggestions([]); }}
                   className="w-full text-left text-xs px-3 py-2 hover:bg-surface">{s}</button>
               ))}
+              {drugName && (
+                <button type="button" onClick={() => { setSuggestions([]); }}
+                  className="w-full text-left text-xs px-3 py-2 hover:bg-surface text-primary-600 font-semibold border-t border-border-light">
+                  + Add Custom "{drugName}"
+                </button>
+              )}
             </div>
           )}
         </div>

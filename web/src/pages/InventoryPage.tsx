@@ -408,7 +408,7 @@ export default function InventoryPage() {
                 </div>
 
                 {/* Autocomplete suggestions dropdown */}
-                {showSuggestions && filteredSuggestions.length > 0 && (
+                {showSuggestions && (filteredSuggestions.length > 0 || drugName) && (
                   <div className="absolute left-0 right-0 mt-1 bg-surface-card rounded-lg border border-border shadow-lg max-h-48 overflow-y-auto z-50 py-1.5 animate-scale-in">
                     {filteredSuggestions.map((suggestion) => (
                       <button
@@ -420,6 +420,15 @@ export default function InventoryPage() {
                         {suggestion}
                       </button>
                     ))}
+                    {drugName && (
+                      <button
+                        type="button"
+                        onClick={() => selectSuggestion(drugName)}
+                        className="w-full text-left text-xs px-3.5 py-2 hover:bg-surface text-primary-600 font-semibold border-t border-border-light transition-colors cursor-pointer"
+                      >
+                        + Add Custom "{drugName}"
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
