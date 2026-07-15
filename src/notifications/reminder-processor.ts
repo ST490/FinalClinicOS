@@ -6,16 +6,16 @@ import { remiderTemplates } from './templates.js';
 // Run via: node --import tsx src/notifications/reminder-processor.ts
 // Or: use node-cron / bull queue in production
 
+// Pony-tail: single-reminder processor for BullMQ worker.
+// Keeps retry + status side effects in one place; the queue owns scheduling.
+
 export class ReminderProcessor {
-  async processClinicReminders(clinicId: string) {
-    const pendingReminders = await prisma.reminder.findMany({
-      where: {
-        clinicId,
-        status: 'PENDING',
-        scheduledAt: { lte: new Date() },
-      },
+  async processOneReminder(reminderId: string): Promise<{ id: string; status: string; sid?: string | null }> {
+    const reminder = await prisma.reminder.findUnique({
+      where: { id: reminderId },
       include: {
         patient: { select: { name: true, phone: true } },
+        clinic: { select: { name: true } },
         appointment: {
           select: {
             slotStart: true,
@@ -25,81 +25,82 @@ export class ReminderProcessor {
       },
     });
 
-    const results = [];
-
-    for (const reminder of pendingReminders) {
-      try {
-        if (!reminder.patient.phone) {
-          await prisma.reminder.update({
-            where: { id: reminder.id },
-            data: {
-              status: 'FAILED',
-              errorMessage: 'Patient has no phone number',
-            },
-          });
-          results.push({ id: reminder.id, status: 'skipped', reason: 'no_phone' });
-          continue;
-        }
-
-        const message = remiderTemplates.render(reminder.templateId, {
-          patientName: reminder.patient.name,
-          appointmentDate: reminder.appointment?.slotStart?.toLocaleDateString() || '',
-          doctorName: reminder.appointment?.doctor?.name || '',
-          clinicName: '', // Will be fetched from clinic if needed
-          ...(reminder.templateData as Record<string, string>),
-        });
-
-        const result = reminder.channel === 'WHATSAPP'
-          ? await twilioService.sendWhatsApp(reminder.patient.phone, message, {
-              clinicId: reminder.clinicId,
-              reminderId: reminder.id,
-            })
-          : await twilioService.sendSMS(reminder.patient.phone, message, {
-              clinicId: reminder.clinicId,
-              reminderId: reminder.id,
-            });
-
-        const sid = typeof result === 'object' && 'sid' in result ? (result as { sid: string }).sid : undefined; // ponytail: type guard
-
-        await prisma.reminder.update({
-          where: { id: reminder.id },
-          data: {
-            status: 'SENT',
-            sentAt: new Date(),
-            providerMessageId: sid,
-          },
-        });
-
-        results.push({ id: reminder.id, status: 'sent', sid: typeof result === 'object' && 'sid' in result ? result.sid : null });
-      } catch (error: any) {
-        const retryCount = reminder.retryCount + 1;
-        await prisma.reminder.update({
-          where: { id: reminder.id },
-          data: {
-            status: retryCount >= reminder.maxRetries ? 'FAILED' : 'PENDING',
-            errorMessage: error.message,
-            retryCount,
-          },
-        });
-        results.push({ id: reminder.id, status: 'failed', error: error.message });
-      }
+    if (!reminder) throw new Error(`Reminder ${reminderId} not found`);
+    if (reminder.status === 'SENT' || reminder.status === 'DELIVERED' || reminder.status === 'READ') {
+      return { id: reminder.id, status: 'skipped_already_sent' };
+    }
+    if (!reminder.patient.phone) {
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: { status: 'FAILED', errorMessage: 'Patient has no phone number' },
+      });
+      return { id: reminder.id, status: 'skipped_no_phone' };
     }
 
+    const message = remiderTemplates.render(reminder.templateId, {
+      patientName: reminder.patient.name,
+      appointmentDate: reminder.appointment?.slotStart?.toLocaleDateString() || '',
+      doctorName: reminder.appointment?.doctor?.name || '',
+      clinicName: reminder.clinic?.name || '',
+      ...(reminder.templateData as Record<string, string>),
+    });
+
+    let result;
+    try {
+      result = reminder.channel === 'WHATSAPP'
+        ? await twilioService.sendWhatsApp(reminder.patient.phone, message, {
+            clinicId: reminder.clinicId,
+            reminderId: reminder.id,
+          })
+        : await twilioService.sendSMS(reminder.patient.phone, message, {
+            clinicId: reminder.clinicId,
+            reminderId: reminder.id,
+          });
+    } catch (err: any) {
+      console.error(`[ReminderProcessor] Twilio dispatch failed for reminderId: ${reminder.id}:`, err);
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: {
+          status: 'FAILED',
+          errorMessage: err.message || String(err),
+        },
+      });
+      return { id: reminder.id, status: 'FAILED' };
+    }
+
+    const sid = typeof result === 'object' && 'sid' in result ? (result as { sid: string }).sid : null;
+
+    await prisma.reminder.update({
+      where: { id: reminder.id },
+      data: { status: 'SENT', sentAt: new Date(), providerMessageId: sid },
+    });
+
+    return { id: reminder.id, status: 'sent', sid };
+  }
+
+  async processClinicReminders(clinicId: string) {
+    const pendingReminders = await prisma.reminder.findMany({
+      where: {
+        clinicId,
+        status: 'PENDING',
+        scheduledAt: { lte: new Date() },
+      },
+      select: { id: true },
+    });
+
+    const results = [];
+    for (const { id } of pendingReminders) {
+      results.push(await this.processOneReminder(id));
+    }
     return results;
   }
 
   async runAllPending() {
-    // Get all clinics with pending reminders
-    const clinics = await prisma.clinic.findMany({
-      select: { id: true },
-    });
-
+    const clinics = await prisma.clinic.findMany({ select: { id: true } });
     const allResults = [];
-    for (const clinic of clinics) {
-      const results = await this.processClinicReminders(clinic.id);
-      allResults.push(...results);
+    for (const { id } of clinics) {
+      allResults.push(...(await this.processClinicReminders(id)));
     }
-
     return allResults;
   }
 }

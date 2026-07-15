@@ -31,6 +31,7 @@ export class BillingService {
         appointmentId: input.appointmentId,
         prescriptionId: input.prescriptionId,
         recordedById: input.recordedById,
+        createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
       },
       include: {
         patient: { select: { id: true, name: true, phone: true } },
@@ -70,7 +71,6 @@ export class BillingService {
       where: { id },
       data: {
         amountDue: 0,
-        amountPaid: 0,
         status: 'WAIVED',
         waivedAt: new Date(),
         waivedById: input.waivedById,

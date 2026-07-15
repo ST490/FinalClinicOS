@@ -1,9 +1,11 @@
-import {
-  statsByRole, calendarAppointments, waitlistEntries, duesEntries,
-} from '../../mockData';
+import { statsByRole } from '../../lib/constants';
 import StatCard from '../../components/ui/StatCard';
 import Badge from '../../components/ui/Badge';
-import { Plus, CreditCard } from 'lucide-react';
+import { Plus } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useApiQuery } from '../../lib/useApiQuery';
+import { appointmentApi } from '../../lib/appointments';
+import { billingApi } from '../../lib/billing';
 
 const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
 
@@ -15,8 +17,101 @@ const statusColors: Record<string, string> = {
 };
 
 export default function ReceptionistDashboard() {
-  const stats = statsByRole.RECEPTIONIST;
-  const rooms = Object.keys(calendarAppointments);
+  const { clinic } = useAuth();
+
+  // Today's date range
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // Fetch today's appointments (clinic-wide)
+  const { data: appointmentsData } = useApiQuery(
+    () =>
+      appointmentApi.list({
+        clinicId: clinic?.id,
+        fromDate: todayStart.toISOString(),
+        toDate: todayEnd.toISOString(),
+        limit: 100,
+      }),
+    { skip: !clinic?.id },
+  );
+
+  // Fetch dues
+  const { data: duesData } = useApiQuery(
+    () => billingApi.list({ clinicId: clinic?.id, limit: 10 }),
+    { skip: !clinic?.id }
+  );
+
+  const displayAppointments = (appointmentsData?.data || []).reduce<Record<string, any[]>>((acc, apt) => {
+    const columnName = apt.doctor?.name || 'General Consultation';
+    if (!acc[columnName]) {
+      acc[columnName] = [];
+    }
+    const start = apt.slotStart ? new Date(apt.slotStart) : null;
+    let timeStr = '';
+    if (start) {
+      timeStr = start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+      if (timeStr.startsWith('0')) {
+        timeStr = timeStr.slice(1);
+      }
+    }
+
+    acc[columnName].push({
+      id: apt.id,
+      patientName: apt.patient?.name || 'Patient',
+      time: timeStr,
+      reason: apt.notes || 'Consultation',
+      category: apt.category,
+      status: apt.status === 'BOOKED' ? 'Confirmed' : apt.status === 'IN_PROGRESS' ? 'In Progress' : apt.status,
+    });
+    return acc;
+  }, {});
+
+  const rooms = Array.from(new Set([
+    ...((appointmentsData?.data || []).map(a => a.doctor?.name || 'General Consultation')),
+    'General Consultation'
+  ]));
+
+  const displayDues = (duesData?.data || []).map(due => ({
+    id: due.id,
+    patient: due.patientName || 'Patient',
+    date: due.createdAt?.split('T')[0] || '',
+    amount: parseFloat(due.amountDue) || 0,
+    method: due.paymentMethod || 'CASH',
+    status: due.status,
+  }));
+
+  const waitingCount = (appointmentsData?.data || []).filter(a => a.status === 'BOOKED').length;
+  const checkedInCount = (appointmentsData?.data || []).filter(a => a.status === 'CONFIRMED' || a.status === 'IN_PROGRESS').length;
+  const expectedCount = (appointmentsData?.data || []).length;
+
+  const displayStats = statsByRole.RECEPTIONIST.map((s) => {
+    if (s.id === 'stat-1') {
+      return { ...s, title: `Patients Waiting: ${waitingCount}`, value: 'Avg Wait: 0 min' };
+    }
+    if (s.id === 'stat-2') {
+      return { ...s, value: String(checkedInCount) };
+    }
+    if (s.id === 'stat-3') {
+      return { ...s, value: String(expectedCount) };
+    }
+    if (s.id === 'stat-4') {
+      return { ...s, value: '$0' };
+    }
+    return s;
+  });
+
+  const displayWaitlist = (appointmentsData?.data || [])
+    .filter(a => a.status === 'BOOKED')
+    .map(a => ({
+      id: a.id,
+      patient: a.patient?.name || 'Patient',
+      arrivalTime: new Date(a.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      visitType: a.type || 'SCHEDULED',
+      category: a.category,
+      status: 'Waiting',
+    }));
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -29,7 +124,7 @@ export default function ReceptionistDashboard() {
 
       {/* Stat Cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 stagger-children">
-        {stats.map((stat, i) => (
+        {displayStats.map((stat, i) => (
           <StatCard key={stat.id} data={stat} index={i} />
         ))}
       </div>
@@ -38,7 +133,7 @@ export default function ReceptionistDashboard() {
       <div className="bg-surface-card rounded-xl border border-border overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-light">
           <h3 className="text-sm font-semibold text-text-primary">Daily Appointment Calendar View</h3>
-          <button className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm">
+          <button className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3.5 py-2 rounded-lg transition-colors shadow-sm cursor-pointer">
             Book New Appointment
           </button>
         </div>
@@ -61,43 +156,47 @@ export default function ReceptionistDashboard() {
                   {time}
                 </div>
                 {rooms.map((room) => {
-                  const appointments = calendarAppointments[room]?.filter(
+                  const appointments = (displayAppointments[room] || []).filter(
                     (a) => a.time === time
-                  ) || [];
+                  );
 
                   return (
                     <div key={room} className="p-1.5 min-h-[60px]">
-                      {appointments.map((apt) => (
-                        <div
-                          key={apt.id}
-                          className={`p-2 rounded-lg border text-xs mb-1 ${statusColors[apt.status] || 'bg-slate-50 border-slate-200'}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold">{apt.patientName}</span>
-                            <span className="text-[10px] opacity-70">{apt.time}</span>
-                          </div>
-                          {apt.reason && (
-                            <p className="text-[10px] opacity-80 mt-0.5">{apt.reason}</p>
-                          )}
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Badge variant={
-                              apt.status === 'Arrived' ? 'success' :
-                              apt.status === 'Confirmed' ? 'info' :
-                              apt.status === 'In Progress' ? 'warning' : 'neutral'
-                            } size="sm">
-                              {apt.status}
-                            </Badge>
-                            {apt.isNewPatient && (
-                              <span className="text-[9px] font-medium text-primary-600">▲ New Patient</span>
-                            )}
-                            {apt.hasOfflinePayment && (
-                              <span className="text-[9px] text-text-muted flex items-center gap-0.5">
-                                <CreditCard className="w-2.5 h-2.5" /> Offline Payment Due
-                              </span>
-                            )}
-                          </div>
+                      {appointments.length === 0 ? (
+                        <div className="h-full border border-dashed border-border-light rounded-lg flex items-center justify-center p-2 text-[10px] text-text-muted">
+                          Empty Slot
                         </div>
-                      ))}
+                      ) : (
+                        appointments.map((apt) => (
+                          <div
+                            key={apt.id}
+                            className={`p-2 rounded-lg border text-xs mb-1 ${statusColors[apt.status] || 'bg-slate-50 border-slate-200'}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold">{apt.patientName}</span>
+                              <span className="text-[10px] opacity-70">{apt.time}</span>
+                            </div>
+                            {apt.reason && (
+                              <p className="text-[10px] opacity-80 mt-0.5">{apt.reason}</p>
+                            )}
+                            {apt.category === 'FIRST_TIME' && (
+                              <p className="text-[9px] font-semibold opacity-90 mt-0.5">• New patient</p>
+                            )}
+                            {apt.category === 'FREE_CHECKUP' && (
+                              <p className="text-[9px] font-semibold opacity-90 mt-0.5">• Free checkup</p>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Badge variant={
+                                apt.status === 'Arrived' ? 'success' :
+                                  apt.status === 'Confirmed' ? 'info' :
+                                    apt.status === 'In Progress' ? 'warning' : 'neutral'
+                              } size="sm">
+                                {apt.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))
+                      )}
                     </div>
                   );
                 })}
@@ -126,27 +225,31 @@ export default function ReceptionistDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
-                {waitlistEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-surface/50 transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-text-primary">{entry.patient}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{entry.arrivalTime}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant={
-                        entry.status === 'Arrived' ? 'success' :
-                        entry.status === 'Confirmed' ? 'info' :
-                        entry.status === 'In Progress' ? 'warning' : 'neutral'
-                      }>{entry.visitType}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant={entry.status === 'Arrived' ? 'success' : 'warning'}>{entry.status}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <button className="text-[11px] font-medium text-primary-600 hover:text-primary-700 px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 transition-colors">
-                        {entry.status === 'Arrived' ? 'Check-in' : 'Begin Onboarding'}
-                      </button>
+                {displayWaitlist.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-xs text-text-muted italic">
+                      No patients in the waitlist today
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  displayWaitlist.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-surface/50 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-text-primary">{entry.patient}</td>
+                      <td className="px-4 py-2.5 text-text-secondary">{entry.arrivalTime}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="neutral">{entry.visitType}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="warning">{entry.status}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <button className="text-[11px] font-medium text-primary-600 hover:text-primary-700 px-2 py-1 rounded border border-primary-200 hover:bg-primary-50 transition-colors cursor-pointer">
+                          Check-in
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -166,33 +269,30 @@ export default function ReceptionistDashboard() {
                   <th className="px-4 py-2 text-left font-semibold text-text-secondary">Amount</th>
                   <th className="px-4 py-2 text-left font-semibold text-text-secondary">Method</th>
                   <th className="px-4 py-2 text-left font-semibold text-text-secondary">Status</th>
-                  <th className="px-4 py-2 text-left font-semibold text-text-secondary">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
-                {duesEntries.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-surface/50 transition-colors">
-                    <td className="px-4 py-2.5 font-medium text-text-primary">{entry.patient}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{entry.date}</td>
-                    <td className="px-4 py-2.5 text-text-primary font-medium">${entry.amount}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{entry.method}</td>
-                    <td className="px-4 py-2.5 text-text-secondary">{entry.status}</td>
-                    <td className="px-4 py-2.5 text-text-muted">—</td>
+                {displayDues.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-xs text-text-muted italic">
+                      No invoices recorded
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  displayDues.map((entry) => (
+                    <tr key={entry.id} className="hover:bg-surface/50 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-text-primary">{entry.patient}</td>
+                      <td className="px-4 py-2.5 text-text-secondary">{entry.date}</td>
+                      <td className="px-4 py-2.5 text-text-primary font-medium">${entry.amount}</td>
+                      <td className="px-4 py-2.5 text-text-secondary">{entry.method}</td>
+                      <td className="px-4 py-2.5 text-text-secondary">
+                        <Badge variant={entry.status === 'PAID' ? 'success' : 'warning'}>{entry.status}</Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-          </div>
-          {/* Record Payment Form */}
-          <div className="px-4 py-3 border-t border-border-light">
-            <div className="flex gap-2 items-center">
-              <input type="text" placeholder="Patient" className="flex-1 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all" />
-              <input type="text" placeholder="Amount" className="w-20 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all" />
-              <input type="text" placeholder="Method" className="w-20 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all" />
-              <button className="text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">
-                Record Payment
-              </button>
-            </div>
           </div>
         </div>
 
@@ -224,7 +324,7 @@ export default function ReceptionistDashboard() {
               <label className="text-xs font-medium text-text-secondary block mb-1">Reason for Visit</label>
               <input type="text" placeholder="e.g. General Checkup" className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all" />
             </div>
-            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors shadow-sm">
+            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer">
               <Plus className="w-3.5 h-3.5" />
               Register Walk-in
             </button>

@@ -1,17 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRole } from '../context/RoleContext';
-import { 
-  BarChart3, TrendingUp, Users, Package, Calendar, Lock, Globe, 
-  Building2, HeartPulse, Clock, FileText, 
+import { useAuth } from '../context/AuthContext';
+import {
+  BarChart3, TrendingUp, Users, Package, Calendar, Lock, Globe,
+  Building2, HeartPulse, Clock, FileText,
   ListOrdered, Pill, AlertTriangle, ShieldCheck, CheckCircle2, UserCheck
 } from 'lucide-react';
-
-const CLINICS = [
-  'Downtown Specialty Clinic',
-  'Westside Family Practice',
-  'Northside Urgent Care',
-  'East Valley Health',
-];
+import { useApiQuery } from '../lib/useApiQuery';
+import { staffApi } from '../lib/staff';
+import { reportsApi } from '../lib/reports';
+import { LineChartCard, BarChartCard, PieChartCard } from '../components/charts/Charts';
 
 // ────────────────────────────────────────────────────────
 // 1. DATASETS FOR EACH ROLE
@@ -216,6 +214,26 @@ const REPORTS_DATA = {
 
 export default function ReportsPage() {
   const { role } = useRole();
+  const { clinic, clinics } = useAuth();
+  const clinicId = clinic?.id;
+
+  // HR report data (scoped to the HR user's clinic).
+  const { data: staffList } = useApiQuery(
+    () => staffApi.list({ clinicId }),
+    { skip: !clinicId }
+  );
+  const { data: staffReport } = useApiQuery(
+    () => reportsApi.staff(clinicId!, { fromDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), toDate: new Date().toISOString().slice(0, 10) }),
+    { skip: !clinicId }
+  );
+  const { data: leaveReport } = useApiQuery(
+    () => reportsApi.leave(clinicId!, { fromDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10), toDate: new Date().toISOString().slice(0, 10) }),
+    { skip: !clinicId }
+  );
+  const { data: payrollReport } = useApiQuery(
+    () => reportsApi.payroll(clinicId!, { period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` }),
+    { skip: !clinicId }
+  );
   const isMaster = role === 'MASTER';
   const isSubMaster = role === 'SUB_MASTER';
 
@@ -224,8 +242,10 @@ export default function ReportsPage() {
     return isMaster ? 'ORG' : 'CLINIC';
   });
 
-  const [selectedClinic, setSelectedClinic] = useState(CLINICS[0]);
-  const [dateRange, setDateRange] = useState('Month to Date');
+  const [selectedClinic, setSelectedClinic] = useState('');
+  const [dateRange, setDateRange] = useState('Month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
 
   // Reset viewScope if role dynamically switches
   useEffect(() => {
@@ -236,13 +256,115 @@ export default function ReportsPage() {
     }
   }, [role, isMaster]);
 
-  // ────────────────────────────────────────────────────────
-  // 2. RENDER APPROPRIATE MODULE ACCORDING TO ROLE
-  // ────────────────────────────────────────────────────────
+  // Auto-select the first real clinic once they load
+  useEffect(() => {
+    if (clinics.length && !selectedClinic) setSelectedClinic(clinics[0].name);
+  }, [clinics, selectedClinic]);
+
+  const displayData = useMemo(() => {
+    const raw = isMaster || isSubMaster
+      ? (viewScope === 'ORG' ? REPORTS_DATA.MASTER : REPORTS_DATA.SUB_MASTER)
+      : (REPORTS_DATA[role as keyof typeof REPORTS_DATA] || REPORTS_DATA.MASTER);
+
+    const zeroed: any = { ...raw };
+    if (zeroed.revenue) zeroed.revenue = '$0';
+    if (zeroed.revenueGrowth) zeroed.revenueGrowth = '0%';
+    if (zeroed.patientsSeen) zeroed.patientsSeen = '0';
+    if (zeroed.patientsGrowth) zeroed.patientsGrowth = '0%';
+    if (zeroed.avgTicket) zeroed.avgTicket = '$0';
+    if (zeroed.ticketGrowth) zeroed.ticketGrowth = '0%';
+    if (zeroed.totalConsultations) zeroed.totalConsultations = '0';
+    if (zeroed.consultationsGrowth) zeroed.consultationsGrowth = '0%';
+    if (zeroed.avgDuration) zeroed.avgDuration = '0 min';
+    if (zeroed.durationGrowth) zeroed.durationGrowth = '0%';
+    if (zeroed.rxRate) zeroed.rxRate = '0%';
+    if (zeroed.rxRateGrowth) zeroed.rxRateGrowth = '0%';
+    if (zeroed.totalIntakes) zeroed.totalIntakes = '0';
+    if (zeroed.intakesGrowth) zeroed.intakesGrowth = '0%';
+    if (zeroed.vitalsSuccess) zeroed.vitalsSuccess = '0%';
+    if (zeroed.vitalsGrowth) zeroed.vitalsGrowth = '0%';
+    if (zeroed.pendingReminders) zeroed.pendingReminders = '0';
+    if (zeroed.remindersGrowth) zeroed.remindersGrowth = '0%';
+    if (zeroed.dispensedRx) zeroed.dispensedRx = '0';
+    if (zeroed.dispensedGrowth) zeroed.dispensedGrowth = '0%';
+    if (zeroed.lowStockResolved) zeroed.lowStockResolved = '0 Items';
+    if (zeroed.resolvedGrowth) zeroed.resolvedGrowth = '0 Left';
+    if (zeroed.expiryDisposed) zeroed.expiryDisposed = '0 items';
+    if (zeroed.expiryGrowth) zeroed.expiryGrowth = '0%';
+    if (zeroed.checkedIn) zeroed.checkedIn = '0';
+    if (zeroed.checkedInGrowth) zeroed.checkedInGrowth = '0%';
+    if (zeroed.avgWait) zeroed.avgWait = '0 min';
+    if (zeroed.waitGrowth) zeroed.waitGrowth = '0%';
+    if (zeroed.cancellationRate) zeroed.cancellationRate = '0%';
+    if (zeroed.cancelGrowth) zeroed.cancelGrowth = '0%';
+    if (zeroed.staffCount) zeroed.staffCount = '0';
+    if (zeroed.staffGrowth) zeroed.staffGrowth = '0%';
+    if (zeroed.attendance) zeroed.attendance = '0%';
+    if (zeroed.attendanceGrowth) zeroed.attendanceGrowth = '0%';
+    if (zeroed.leaveResolved) zeroed.leaveResolved = '0%';
+    if (zeroed.leaveGrowth) zeroed.leaveGrowth = '0 Pending';
+
+    if (Array.isArray(zeroed.revenueMonthly)) {
+      zeroed.revenueMonthly = zeroed.revenueMonthly.map((m: any) => ({ ...m, val: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.patientTrends)) {
+      zeroed.patientTrends = zeroed.patientTrends.map((t: any) => ({ ...t, scheduled: 0, walkin: 0, hSched: '0%', hWalk: '0%' }));
+    }
+    if (Array.isArray(zeroed.inventoryBreakdown)) {
+      zeroed.inventoryBreakdown = zeroed.inventoryBreakdown.map((i: any) => ({ ...i, pct: 0, val: '0 units' }));
+    }
+    if (Array.isArray(zeroed.consultationsMonthly)) {
+      zeroed.consultationsMonthly = zeroed.consultationsMonthly.map((m: any) => ({ ...m, val: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.diagnosisTrends)) {
+      zeroed.diagnosisTrends = zeroed.diagnosisTrends.map((t: any) => ({ ...t, chronic: 0, acute: 0, hChronic: '0%', hAcute: '0%' }));
+    }
+    if (Array.isArray(zeroed.outcomesBreakdown)) {
+      zeroed.outcomesBreakdown = zeroed.outcomesBreakdown.map((o: any) => ({ ...o, pct: 0, val: '0 patients' }));
+    }
+    if (Array.isArray(zeroed.intakesWeekly)) {
+      zeroed.intakesWeekly = zeroed.intakesWeekly.map((w: any) => ({ ...w, val: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.screeningBreakdown)) {
+      zeroed.screeningBreakdown = zeroed.screeningBreakdown.map((s: any) => ({ ...s, routine: 0, urgent: 0, hRoutine: '0%', hUrgent: '0%' }));
+    }
+    if (Array.isArray(zeroed.tasksProgress)) {
+      zeroed.tasksProgress = zeroed.tasksProgress.map((t: any) => ({ ...t, pct: 0, val: '0 cases' }));
+    }
+    if (Array.isArray(zeroed.dispensationMonthly)) {
+      zeroed.dispensationMonthly = zeroed.dispensationMonthly.map((m: any) => ({ ...m, val: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.dispensedCategories)) {
+      zeroed.dispensedCategories = zeroed.dispensedCategories.map((c: any) => ({ ...c, prescription: 0, otc: 0, hPresc: '0%', hOtc: '0%' }));
+    }
+    if (Array.isArray(zeroed.stockDeltaSummary)) {
+      zeroed.stockDeltaSummary = zeroed.stockDeltaSummary.map((s: any) => ({ ...s, pct: 0, val: '0 units' }));
+    }
+    if (Array.isArray(zeroed.checkinsMonthly)) {
+      zeroed.checkinsMonthly = zeroed.checkinsMonthly.map((m: any) => ({ ...m, val: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.patientFlowType)) {
+      zeroed.patientFlowType = zeroed.patientFlowType.map((f: any) => ({ ...f, scheduled: 0, walkin: 0, hSched: '0%', hWalk: '0%' }));
+    }
+    if (Array.isArray(zeroed.flowCompleteness)) {
+      zeroed.flowCompleteness = zeroed.flowCompleteness.map((f: any) => ({ ...f, pct: 0, val: '0 patients' }));
+    }
+    if (Array.isArray(zeroed.attendanceWeekly)) {
+      zeroed.attendanceWeekly = zeroed.attendanceWeekly.map((w: any) => ({ ...w, percentage: 0, height: '0%' }));
+    }
+    if (Array.isArray(zeroed.onboardingTrends)) {
+      zeroed.onboardingTrends = zeroed.onboardingTrends.map((o: any) => ({ ...o, active: 0, offboarding: 0, hSched: '0%', hWalk: '0%' }));
+    }
+    if (Array.isArray(zeroed.payrollCompletion)) {
+      zeroed.payrollCompletion = zeroed.payrollCompletion.map((p: any) => ({ ...p, pct: 0, val: '0 employees' }));
+    }
+
+    return zeroed;
+  }, [viewScope, role]);
 
   // Master Dashboard OR Sub-Master Dashboard (Financial/Organizational money reports)
   if (isMaster || isSubMaster) {
-    const data = viewScope === 'ORG' ? REPORTS_DATA.MASTER : REPORTS_DATA.SUB_MASTER;
+    const data = displayData as typeof REPORTS_DATA.MASTER;
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
@@ -261,26 +383,23 @@ export default function ReportsPage() {
             <div className="flex rounded-lg border border-border bg-surface p-1 shadow-sm">
               <button
                 onClick={() => setViewScope('CLINIC')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-                  viewScope === 'CLINIC'
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${viewScope === 'CLINIC'
                     ? 'bg-surface-card text-primary-700 shadow-sm border border-border/20'
                     : 'text-text-secondary hover:text-text-primary'
-                }`}
+                  }`}
               >
                 <Building2 className="w-3.5 h-3.5" />
                 Clinic Scope
               </button>
-              
+
               <button
                 disabled={!isMaster}
                 onClick={() => setViewScope('ORG')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 relative ${
-                  !isMaster ? 'opacity-50 cursor-not-allowed text-text-muted' : 'cursor-pointer'
-                } ${
-                  viewScope === 'ORG'
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1 relative ${!isMaster ? 'opacity-50 cursor-not-allowed text-text-muted' : 'cursor-pointer'
+                  } ${viewScope === 'ORG'
                     ? 'bg-surface-card text-primary-700 shadow-sm border border-border/20'
                     : 'text-text-secondary hover:text-text-primary'
-                }`}
+                  }`}
               >
                 {!isMaster && <Lock className="w-2.5 h-2.5 absolute top-0.5 right-0.5 text-text-muted" />}
                 <Globe className="w-3.5 h-3.5" />
@@ -293,20 +412,44 @@ export default function ReportsPage() {
               onChange={(e) => setDateRange(e.target.value)}
               className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
             >
-              <option value="Month to Date">Month to Date</option>
-              <option value="Last 90 Days">Last 90 Days</option>
-              <option value="Year to Date">Year to Date</option>
+              <option value="Year">Year</option>
+              <option value="Month">Month</option>
+              <option value="Custom">Custom</option>
             </select>
 
-            {viewScope === 'ORG' && (
+            {dateRange === 'Custom' && (
+              <div className="flex items-center gap-2 animate-scale-in">
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={customTo || undefined}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
+                />
+                <span className="text-xs font-semibold text-text-secondary">to</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  min={customFrom || undefined}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
+                />
+              </div>
+            )}
+
+            {viewScope === 'CLINIC' && (
               <select
                 value={selectedClinic}
                 onChange={(e) => setSelectedClinic(e.target.value)}
                 className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200 animate-scale-in"
               >
-                {CLINICS.map(c => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
+                {clinics.length === 0 ? (
+                  <option value="">No clinics</option>
+                ) : (
+                  clinics.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))
+                )}
               </select>
             )}
           </div>
@@ -431,7 +574,7 @@ export default function ReportsPage() {
 
   // Doctor Dashboard (Consultations & Clinical Outcomes)
   if (role === 'DOCTOR') {
-    const data = REPORTS_DATA.DOCTOR;
+    const data = displayData as typeof REPORTS_DATA.DOCTOR;
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div>
@@ -563,7 +706,7 @@ export default function ReportsPage() {
 
   // Nurse Dashboard (Intakes & Vitals Screenings)
   if (role === 'NURSE') {
-    const data = REPORTS_DATA.NURSE;
+    const data = displayData as typeof REPORTS_DATA.NURSE;
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div>
@@ -690,7 +833,7 @@ export default function ReportsPage() {
 
   // Pharmacist Dashboard (Inventory dispensation & movements)
   if (role === 'PHARMACIST') {
-    const data = REPORTS_DATA.PHARMACIST;
+    const data = displayData as typeof REPORTS_DATA.PHARMACIST;
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div>
@@ -817,7 +960,7 @@ export default function ReportsPage() {
 
   // Receptionist Dashboard (Check-ins, Wait times, flow completeness)
   if (role === 'RECEPTIONIST') {
-    const data = REPORTS_DATA.RECEPTIONIST;
+    const data = displayData as typeof REPORTS_DATA.RECEPTIONIST;
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div>
@@ -942,9 +1085,29 @@ export default function ReportsPage() {
     );
   }
 
-  // HR Dashboard (Staff attendance & payroll completion)
+  // HR Dashboard (Staff attendance & payroll completion) — real data
   if (role === 'HR') {
-    const data = REPORTS_DATA.HR;
+    const staff = staffList || [];
+    const sReport = staffReport;
+    const lReport = leaveReport;
+    const pReport = payrollReport;
+
+    const attendanceTrend = (sReport?.byDay || []).map((d: any) => ({
+      label: (d.date || '').slice(5),
+      rate: Math.round((d.rate || 0) * 100),
+    }));
+    const leaveByType = (lReport?.byType || []).map((d: any) => ({ type: d.type, count: Number(d.count || 0) }));
+    const payrollByDept = (pReport?.byDepartment || []).map((d: any) => ({ department: d.department || 'Unassigned', net: Math.round(d.net || 0) }));
+    const payrollByWage = (pReport?.byWageType || []).map((d: any) => ({ wageType: d.wageType || 'N/A', net: Math.round(d.net || 0) }));
+
+    const fmt = (n: number) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`;
+    const pct = (n: number) => `${Math.round((n || 0) * 100)}%`;
+    const empty = (label: string) => (
+      <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm flex items-center justify-center text-xs text-text-muted italic" style={{ boxShadow: 'var(--shadow-card)' }}>
+        {label}
+      </div>
+    );
+
     return (
       <div className="space-y-6 animate-fade-in font-sans pb-12">
         <div>
@@ -953,7 +1116,7 @@ export default function ReportsPage() {
             Human Resources & Attendance Reports
           </h1>
           <p className="text-xs text-text-secondary mt-0.5">
-            Monitor weekly attendance statistics, leave resolutions, and onboarding logistics.
+            Monitor weekly attendance statistics, leave resolutions, and payroll calculations.
           </p>
         </div>
 
@@ -961,10 +1124,7 @@ export default function ReportsPage() {
           <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Total Staff Registered</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-text-primary">{data.staffCount}</span>
-                <span className="text-xs font-bold text-success">{data.staffGrowth}</span>
-              </div>
+              <span className="text-2xl font-black text-text-primary">{staff.length}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
               <Users className="w-5 h-5" />
@@ -974,10 +1134,7 @@ export default function ReportsPage() {
           <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Average Attendance</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-text-primary">{data.attendance}</span>
-                <span className="text-xs font-bold text-success">{data.attendanceGrowth}</span>
-              </div>
+              <span className="text-2xl font-black text-text-primary">{pct(sReport?.attendanceRate || 0)}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600">
               <CheckCircle2 className="w-5 h-5" />
@@ -987,10 +1144,7 @@ export default function ReportsPage() {
           <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
             <div className="space-y-1">
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Leave Resolution Rate</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-text-primary">{data.leaveResolved}</span>
-                <span className="text-xs font-bold text-text-secondary">{data.leaveGrowth}</span>
-              </div>
+              <span className="text-2xl font-black text-text-primary">{pct(lReport?.resolutionRate || 0)}</span>
             </div>
             <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
               <Clock className="w-5 h-5" />
@@ -999,69 +1153,45 @@ export default function ReportsPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-4" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <h3 className="text-sm font-bold text-text-primary">Weekly Attendance Rate</h3>
-            <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
-              {data.attendanceWeekly.map((item) => (
-                <div key={item.day} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
-                    {item.percentage}% Present
-                  </div>
-                  <div className="w-full bg-gradient-to-t from-teal-600 to-primary-500 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
-                  <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {attendanceTrend.length ? (
+            <BarChartCard title="Weekly Attendance Rate" data={attendanceTrend} xKey="label" yKey="rate" suffix="%" color="#0d9488" height={220} />
+          ) : empty('No attendance recorded yet')}
 
-          <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-4" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-text-primary">Staff Operations Activity</h3>
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Active Onboarding</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Offboarding</span>
-              </div>
-            </div>
-            <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
-              {data.onboardingTrends.map((item) => (
-                <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
-                    <span>Onboard: {item.active}</span> <span>Offboard: {item.offboarding}</span>
-                  </div>
-                  <div className="flex items-end gap-1.5 h-full">
-                    <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hSched }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hWalk }}></div>
-                  </div>
-                  <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          {leaveByType.length ? (
+            <PieChartCard title="Leave Breakdown by Type" data={leaveByType} nameKey="type" valueKey="count" height={220} />
+          ) : empty('No leave data')}
 
-          <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-4 lg:col-span-2" style={{ boxShadow: 'var(--shadow-card)' }}>
-            <h3 className="text-sm font-bold text-text-primary">Payroll Calculations Status</h3>
-            <div className="space-y-4 pt-2">
-              <div className="h-6 w-full rounded-lg overflow-hidden flex shadow-inner">
-                {data.payrollCompletion.map((item) => (
-                  <div key={item.label} className={`${item.color} h-full transition-all duration-700 hover:opacity-90 flex items-center justify-center text-[9px] text-white font-bold`} style={{ width: `${item.pct}%` }}>
-                    {item.pct}%
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
-                {data.payrollCompletion.map((item) => (
-                  <div key={item.label} className="p-3.5 rounded-xl border border-border bg-surface/30 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${item.color}`}></span>
-                      <span className="text-xs font-semibold text-text-primary">{item.label}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-bold text-text-primary">{item.val}</p>
-                      <p className="text-[9px] text-text-muted font-semibold uppercase mt-0.5">{item.pct}% total</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {payrollByDept.length ? (
+            <BarChartCard title="Payroll by Department" data={payrollByDept} xKey="department" yKey="net" height={220} />
+          ) : empty('No payroll generated')}
+
+          {payrollByWage.length ? (
+            <PieChartCard title="Payroll by Wage Type" data={payrollByWage} nameKey="wageType" valueKey="net" height={220} />
+          ) : empty('No payroll generated')}
+        </div>
+
+        <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm" style={{ boxShadow: 'var(--shadow-card)' }}>
+          <h3 className="text-sm font-bold text-text-primary mb-4">Payroll Summary ({pReport?.period || 'current'})</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="p-3.5 rounded-xl border border-border bg-surface/30">
+              <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Headcount</p>
+              <p className="text-lg font-bold text-text-primary mt-1">{pReport?.headcount || 0}</p>
+            </div>
+            <div className="p-3.5 rounded-xl border border-border bg-surface/30">
+              <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Total Net</p>
+              <p className="text-lg font-bold text-text-primary mt-1">{fmt(pReport?.totalNet || 0)}</p>
+            </div>
+            <div className="p-3.5 rounded-xl border border-border bg-surface/30">
+              <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Basic</p>
+              <p className="text-lg font-bold text-text-primary mt-1">{fmt(pReport?.totalBasic || 0)}</p>
+            </div>
+            <div className="p-3.5 rounded-xl border border-border bg-surface/30">
+              <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Overtime</p>
+              <p className="text-lg font-bold text-text-primary mt-1">{fmt(pReport?.totalOvertime || 0)}</p>
+            </div>
+            <div className="p-3.5 rounded-xl border border-border bg-surface/30">
+              <p className="text-[10px] font-semibold text-text-secondary uppercase tracking-wider">Deductions</p>
+              <p className="text-lg font-bold text-text-primary mt-1">{fmt(pReport?.totalDeduction || 0)}</p>
             </div>
           </div>
         </div>

@@ -29,14 +29,14 @@ export function generateAccessToken(payload: Omit<JwtPayload, 'iat' | 'exp'>): s
       is2FAEnabled: payload.is2FAEnabled,
     },
     JWT_SECRET!,
-    { expiresIn: '15m', issuer: 'clinicos', audience: 'clinicos-api' }
+    { expiresIn: '15m', issuer: 'careme', audience: 'careme-api' }
   );
 }
 
 export function verifyAccessToken(token: string): JwtPayload {
   return jwt.verify(token, JWT_SECRET!, {
-    issuer: 'clinicos',
-    audience: 'clinicos-api',
+    issuer: 'careme',
+    audience: 'careme-api',
   }) as JwtPayload;
 }
 

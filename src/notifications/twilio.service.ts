@@ -43,7 +43,7 @@ export class TwilioService {
 
     const message = await client.messages.create({
       to: `whatsapp:${to}`,
-      from: `whatsapp:${config.twilio.phoneNumber}`,
+      from: `whatsapp:${config.twilio.whatsappPhoneNumber || config.twilio.phoneNumber}`,
       body,
     });
 

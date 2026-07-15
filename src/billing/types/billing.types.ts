@@ -8,6 +8,7 @@ export interface CreateDueInput {
   appointmentId?: string;
   prescriptionId?: string;
   recordedById: string;
+  createdAt?: Date | string;
 }
 
 export interface RecordPaymentInput {

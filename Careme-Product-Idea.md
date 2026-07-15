@@ -1,4 +1,4 @@
-# ClinicOS — Product Idea
+# Careme — Product Idea
 
 ## 1. What It Is
 A white-labeled, multi-tenant SaaS platform for doctors/clinics worldwide — giving each clinic its own branded website, patient portal, and operations dashboard, without needing their own dev team. Built solo using AI coding tools (not AI-powered features for customers).
@@ -13,7 +13,7 @@ A white-labeled, multi-tenant SaaS platform for doctors/clinics worldwide — gi
 
 ```
 Master (Organization / Chain Owner)
-   │  buys the platform, manages billing with ClinicOS
+   │  buys the platform, manages billing with Careme
    │
    ├── Sub-Master (Branch / Clinic Owner) — one per clinic location
    │        │
@@ -63,7 +63,7 @@ Main Website
 
 | Role | Key Permissions |
 |---|---|
-| **Master** | Adds/manages clinics, assigns sub-masters, org-wide reports, billing with ClinicOS |
+| **Master** | Adds/manages clinics, assigns sub-masters, org-wide reports, billing with Careme |
 | **Sub-Master (Clinic Owner)** | Full control within their clinic: staff, inventory, reports, white-label settings |
 | **Doctor** | Patient records, prescriptions (public drug DB lookup + custom meds), appointments |
 | **Nurse** | Appointments, patient vitals/history entry, reminders |

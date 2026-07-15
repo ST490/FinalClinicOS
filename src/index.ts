@@ -14,6 +14,8 @@ import billingRouter from './billing/billing.router.js';
 import staffRouter from './staff/staff.router.js';
 import visitRouter from './visits/visit.router.js';
 import attendanceRouter from './attendance/attendance.router.js';
+import payrollRouter from './payroll/payroll.router.js';
+import leaveRouter from './leave/leave.router.js';
 import auditRouter from './audit/audit.router.js';
 import reminderRouter from './reminders/reminder.router.js';
 import reportRouter from './reports/report.router.js';
@@ -45,20 +47,23 @@ app.get('/health', (_req, res) => {
 // ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 
-app.use('/api/auth', authRouter);
-app.use('/api', patientRouter);
-app.use('/api', appointmentRouter);
-app.use('/api', inventoryRouter);
-app.use('/api', orgRouter);
-app.use('/api', prescriptionRouter);
-app.use('/api', billingRouter);
-app.use('/api', staffRouter);
-app.use('/api', visitRouter);
-app.use('/api', attendanceRouter);
-app.use('/api', auditRouter);
-app.use('/api', reminderRouter);
-app.use('/api', reportRouter);
-app.use('/api', medicineRouter);
+// /api/v1 prefix matches blueprint §9 — version from day one.
+app.use('/api/v1/auth', authRouter);
+app.use('/api/v1', patientRouter);
+app.use('/api/v1', appointmentRouter);
+app.use('/api/v1', inventoryRouter);
+app.use('/api/v1', orgRouter);
+app.use('/api/v1', prescriptionRouter);
+app.use('/api/v1', billingRouter);
+app.use('/api/v1', staffRouter);
+app.use('/api/v1', visitRouter);
+app.use('/api/v1', attendanceRouter);
+app.use('/api/v1', payrollRouter);
+app.use('/api/v1', leaveRouter);
+app.use('/api/v1', auditRouter);
+app.use('/api/v1', reminderRouter);
+app.use('/api/v1', reportRouter);
+app.use('/api/v1', medicineRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Route not found' } });
@@ -125,9 +130,7 @@ async function start() {
     console.log(`✓ Database connected`);
 
     // Initialize Redis (non-blocking - rate limiter will fail open if unavailable)
-    getRedisClient().catch(err => {
-      console.warn(`⚠ Redis not available - rate limiting disabled: ${err.message}`);
-    });
+    getRedisClient();
 
     // Start server
     app.listen(config.port, () => {

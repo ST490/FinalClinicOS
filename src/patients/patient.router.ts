@@ -1,10 +1,34 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { patientService } from './patient.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
 
 const router = express.Router();
+
+async function verifyPatientAccess(req: Request, res: Response): Promise<any> {
+  const patient = await patientService.findById(req.params.patientId as string);
+  if (!patient) {
+    res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Patient not found' } });
+    return null;
+  }
+
+  // Tenant check
+  if (req.user!.isOrgOwner) {
+    if (patient.orgId !== req.user!.orgId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return null;
+    }
+  } else {
+    const hasAccess = req.user!.roles.some(r => r.clinicId === patient.clinicId);
+    if (!hasAccess) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return null;
+    }
+  }
+
+  return patient;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMAS
@@ -60,7 +84,7 @@ const searchSchema = z.object({
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
   page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(20),
+  limit: z.coerce.number().min(1).max(1000).optional().default(20),
   sortBy: z.enum(['name', 'createdAt', 'updatedAt']).optional().default('createdAt'),
   sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
 });
@@ -106,15 +130,11 @@ router.post(
   authenticate,
   loadUserRoles,
   checkPermission('patient:create'),
+  requireClinicAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const data = createPatientSchema.parse(req.body);
-      const clinicId = data.clinicId as string || req.user?.activeClinicId;
-
-      if (!clinicId) {
-        res.status(400).json({ error: { code: 'CLINIC_ID_REQUIRED', message: 'clinicId is required' } });
-        return;
-      }
+      const clinicId = data.clinicId as string || req.body.clinicId;
 
       const patient = await patientService.create({
         ...data,
@@ -135,17 +155,12 @@ router.get(
   authenticate,
   loadUserRoles,
   checkPermission('patient:read'),
+  requireClinicAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const clinicId = (req.query.clinicId as string) || req.user?.activeClinicId;
-      if (!clinicId) {
-        res.status(400).json({ error: { code: 'CLINIC_ID_REQUIRED', message: 'clinicId is required' } });
-        return;
-      }
-
+      const clinicId = req.query.clinicId as string;
       const params = searchSchema.parse(req.query);
-      const patientId = req.params.patientId as string;
-const result = await patientService.search({ ...params, clinicId: patientId as string });
+      const result = await patientService.search({ ...params, clinicId });
 
       res.json(result);
     } catch (error) {
@@ -162,11 +177,8 @@ router.get(
   checkPermission('patient:read'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const patient = await patientService.findById(req.params.patientId as string);
-      if (!patient) {
-        res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Patient not found' } });
-        return;
-      }
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
       res.json(patient);
     } catch (error) {
       next(error);
@@ -182,9 +194,11 @@ router.patch(
   checkPermission('patient:update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
       const data = updatePatientSchema.parse(req.body);
-      const patient = await patientService.update(req.params.patientId as string, data);
-      res.json(patient);
+      const updated = await patientService.update(req.params.patientId as string, data);
+      res.json(updated);
     } catch (error) {
       next(error);
     }
@@ -199,6 +213,8 @@ router.delete(
   checkPermission('patient:delete'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
       await patientService.delete(req.params.patientId as string);
       res.json({ success: true, message: 'Patient deleted successfully' });
     } catch (error) {
@@ -215,13 +231,15 @@ router.post(
   checkPermission('patient:update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
       const { tag } = req.body;
       if (!tag || typeof tag !== 'string') {
         res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Tag is required' } });
         return;
       }
-      const patient = await patientService.addTag(req.params.patientId as string, tag);
-      res.json(patient);
+      const updated = await patientService.addTag(req.params.patientId as string, tag);
+      res.json(updated);
     } catch (error) {
       next(error);
     }
@@ -236,11 +254,13 @@ router.delete(
   checkPermission('patient:update'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const patient = await patientService.removeTag(
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
+      const updated = await patientService.removeTag(
         req.params.patientId as string,
         decodeURIComponent(req.params.tag as string)
       );
-      res.json(patient);
+      res.json(updated);
     } catch (error) {
       next(error);
     }
@@ -255,6 +275,8 @@ router.get(
   checkPermission('patient:read'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const patient = await verifyPatientAccess(req, res);
+      if (!patient) return;
       const stats = await patientService.getPatientStats(req.params.patientId as string);
       res.json(stats);
     } catch (error) {

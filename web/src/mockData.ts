@@ -5,6 +5,10 @@ import type {
   CalendarAppointment, WaitlistEntry, DuesEntry,
 } from './types';
 
+// ─── Global Feature Flags ───
+export const SHOW_DEMO_DATA = false;
+export const SHOW_DEMO_SWITCHER = false;
+
 // ─── Navigation Config Per Role ───
 export const navigationByRole: Record<UserRole, NavItem[]> = {
   MASTER: [
@@ -75,6 +79,10 @@ export const navigationByRole: Record<UserRole, NavItem[]> = {
     { id: 'roles', label: 'Role Assignments', icon: 'Shield', href: '/role-assignments' },
     { id: 'settings', label: 'Settings', icon: 'Settings', href: '/settings' },
   ],
+  SUPPORT: [
+    { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', href: '/', badge: 'Active' },
+    { id: 'settings', label: 'Settings', icon: 'Settings', href: '/settings' },
+  ],
 };
 
 // ─── Users Per Role ───
@@ -127,6 +135,13 @@ export const usersByRole: Record<UserRole, User> = {
     email: 'sjenkins@apexmedical.com',
     role: 'HR',
     roleLabel: 'HR Manager',
+  },
+  SUPPORT: {
+    id: 'usr-008',
+    name: 'Support Staff',
+    email: 'support@apexmedical.com',
+    role: 'SUPPORT',
+    roleLabel: 'Support Staff',
   },
 };
 
@@ -386,6 +401,15 @@ export const statsByRole: Record<UserRole, StatCardData[]> = {
       icon: 'ClipboardCheck',
     },
   ],
+  SUPPORT: [
+    {
+      id: 'stat-1',
+      title: 'Total Staff',
+      value: '85',
+      subtitle: 'employees',
+      icon: 'Users',
+    },
+  ],
 };
 
 // ─── Revenue Breakdown by Clinic (Master view) ───
@@ -564,4 +588,6 @@ export const roleLabels: Record<UserRole, string> = {
   PHARMACIST: 'Pharmacist',
   RECEPTIONIST: 'Front Desk',
   HR: 'HR Manager',
+  SUPPORT: 'Support Staff',
 };
+

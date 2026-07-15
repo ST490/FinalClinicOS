@@ -1,44 +1,27 @@
 import React, { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { 
-  Calendar, Clock, Star, Phone, MapPin, 
-  ShieldCheck, CheckCircle2, User, Mail, Award, X
+import {
+  Calendar, Clock, Star, Phone, MapPin,
+  ShieldCheck, CheckCircle2, User, Mail, Award, X, Megaphone, Building2
 } from 'lucide-react';
-
-const DOCTOR_PRESETS: Record<string, { name: string; specialty: string; image: string }[]> = {
-  'Downtown Specialty Clinic': [
-    { name: 'Dr. Aris Thorne', specialty: 'Chief Executive Officer & Physician', image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200' },
-    { name: 'Dr. Sarah Jenkins', specialty: 'Senior Cardiologist', image: 'https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=200' }
-  ],
-  'Westside Family Practice': [
-    { name: 'Dr. Emily Chen', specialty: 'Senior Pediatrician', image: 'https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=200' },
-    { name: 'Dr. David Miller', specialty: 'General Practitioner', image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200' }
-  ],
-  'Northside Urgent Care': [
-    { name: 'Dr. Raj Patel', specialty: 'Urgent Care Specialist', image: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?auto=format&fit=crop&q=80&w=200' },
-    { name: 'Dr. Lisa Tanaka', specialty: 'Emergency Triage Doctor', image: 'https://images.unsplash.com/photo-1594824813573-246434de83fb?auto=format&fit=crop&q=80&w=200' }
-  ],
-  'East Valley Health': [
-    { name: 'Dr. Marcus Aurelius', specialty: 'Integrative Wellness Doctor', image: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=200' },
-    { name: 'Dr. Chloe Vance', specialty: 'Alternative Care Consultant', image: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=200' }
-  ],
-};
-
-const SERVICES_PRESETS: Record<string, string[]> = {
-  'Downtown Specialty Clinic': ['Cardiovascular Screenings', 'Chronic Disease Management', 'Diagnostic Imaging', 'Specialist Consultations'],
-  'Westside Family Practice': ['Pediatric Vaccinations', 'General Family Health check', 'Geriatric Care', 'Annual Wellness Physicals'],
-  'Northside Urgent Care': ['Acute Injury Stitches', 'Fracture Splinting', 'Rapid Flu & COVID Testing', '24/7 Trauma Screenings'],
-  'East Valley Health': ['Holistic Acupuncture', 'Evidence-Based Nutrition', 'Stress Management Therapy', 'Preventive Lifespan Assessments'],
-};
+import { useAuth } from '../context/AuthContext';
+import {
+  getWhitelabel, DEMO_CONFIG, emptyConfig,
+  type WhitelabelConfig, type WLTheme,
+} from '../lib/whitelabel';
 
 export default function PublicLandingPage() {
   const [searchParams] = useSearchParams();
+  const { clinics } = useAuth();
 
-  // Load configuration parameters from URL parameters or fall back to Downtown Specialty Clinic values
-  const clinicName = searchParams.get('clinic') || 'Downtown Specialty Clinic';
-  const headline = searchParams.get('headline') || 'Modern Specialist Care, Tailored to You';
-  const subheadline = searchParams.get('subheadline') || 'Apex clinical specialists utilizing state-of-the-art diagnostic pathways and patient care systems.';
-  const theme = (searchParams.get('theme') || 'teal') as 'teal' | 'indigo' | 'rose' | 'emerald';
+  const clinicId = searchParams.get('clinic') || '';
+  const stored = clinicId ? getWhitelabel(clinicId) : null;
+  const cfg: WhitelabelConfig = stored ?? { ...emptyConfig(clinicId), ...DEMO_CONFIG };
+  const theme = (searchParams.get('theme') as WLTheme) || cfg.theme;
+  const clinicName = (clinicId && clinics.find(c => c.id === clinicId)?.name) || 'Careme Clinic';
+
+  const headline = cfg.headline || 'Modern Specialist Care, Tailored to You';
+  const subheadline = cfg.subheadline || 'Apex clinical specialists utilizing state-of-the-art diagnostic pathways and patient care systems.';
 
   // Booking form states
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -49,11 +32,10 @@ export default function PublicLandingPage() {
   const [preferredTime, setPreferredTime] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState(false);
 
-  // Retrieve presets
-  const doctorsList = DOCTOR_PRESETS[clinicName] || DOCTOR_PRESETS['Downtown Specialty Clinic'];
-  const servicesList = SERVICES_PRESETS[clinicName] || SERVICES_PRESETS['Downtown Specialty Clinic'];
+  const doctorsList = cfg.doctors.map(d => ({ name: d.name, specialty: d.specialty, image: d.photo || 'https://via.placeholder.com/200' }));
+  const servicesList = cfg.services.filter(Boolean);
+  const contact = cfg.contact;
 
-  // Styling helper dictionaries
   const themeClasses = {
     teal: {
       accentText: 'text-teal-600',
@@ -106,14 +88,16 @@ export default function PublicLandingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans flex flex-col">
-      
+
       {/* 1. Navbar */}
       <nav className="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-sm ${style.accentFill}`}>
-              c
-            </div>
+            {cfg.logo ? (
+              <img src={cfg.logo} alt="" className="w-8 h-8 rounded-lg object-cover" />
+            ) : (
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-sm ${style.accentFill}`}>c</div>
+            )}
             <span className="font-extrabold text-base text-slate-900 tracking-tight">{clinicName}</span>
           </div>
           <div className="flex items-center gap-4 sm:gap-6">
@@ -129,128 +113,142 @@ export default function PublicLandingPage() {
         </div>
       </nav>
 
-      {/* 2. Hero Section */}
-      <header className="bg-white border-b border-slate-100 py-16 px-4">
-        <div className="max-w-4xl mx-auto text-center space-y-6">
-          <div className={`mx-auto w-fit text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${style.accentBorder} ${style.accentText} bg-white shadow-sm flex items-center gap-1`}>
-            <Award className="w-3.5 h-3.5" /> Official Patient Portal
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight">
-            {headline}
-          </h1>
-          <p className="text-sm sm:text-base text-slate-500 leading-relaxed max-w-2xl mx-auto font-light">
-            {subheadline}
-          </p>
-          <div className="flex justify-center gap-4 pt-3">
-            <button
-              onClick={() => {
-                setSelectedDoctor(doctorsList[0]?.name || '');
-                setIsBookingOpen(true);
-              }}
-              className={`text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl shadow-md cursor-pointer transition-all ${style.accentBg}`}
-            >
-              Book Appointment
-            </button>
-            <a
-              href="#contact"
-              className="text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 cursor-pointer transition-all flex items-center gap-1.5"
-            >
-              <Phone className="w-4 h-4 text-slate-400" /> Contact Clinic
-            </a>
-          </div>
+      {/* Motion / announcement banner */}
+      {cfg.motionBanner.enabled && (
+        <div className={`flex items-center gap-2 px-4 py-2 ${style.accentFill} text-white text-xs font-semibold animate-pulse`}>
+          <Megaphone className="w-4 h-4 shrink-0" />
+          <span className="truncate">{cfg.motionBanner.title} — {cfg.motionBanner.message}</span>
+          {cfg.motionBanner.ctaLabel && (
+            <a href={cfg.motionBanner.ctaUrl || '#contact'} className="underline shrink-0 ml-auto">{cfg.motionBanner.ctaLabel}</a>
+          )}
         </div>
-      </header>
+      )}
+
+      {/* 2. Hero / Banner Section */}
+      {cfg.banner ? (
+        <header className="relative bg-white border-b border-slate-100">
+          <img src={cfg.banner} alt="" className="w-full h-64 object-cover" />
+          <div className="absolute inset-0 bg-black/35 flex flex-col items-center justify-center text-center px-4 space-y-5">
+            <h1 className="text-3xl sm:text-4xl font-black text-white leading-tight tracking-tight drop-shadow-lg">{headline}</h1>
+            <p className="text-sm sm:text-base text-white/90 leading-relaxed max-w-2xl mx-auto font-light drop-shadow">{subheadline}</p>
+            <div className="flex justify-center gap-4 pt-2">
+              <button
+                onClick={() => { setSelectedDoctor(doctorsList[0]?.name || ''); setIsBookingOpen(true); }}
+                className="text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl shadow-md cursor-pointer transition-all bg-white text-slate-900 hover:bg-slate-100"
+              >
+                Book Appointment
+              </button>
+              <a href="#contact" className="text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl border border-white/60 text-white hover:bg-white/10 cursor-pointer transition-all flex items-center gap-1.5">
+                <Phone className="w-4 h-4" /> Contact Clinic
+              </a>
+            </div>
+          </div>
+        </header>
+      ) : (
+        <header className="bg-white border-b border-slate-100 py-16 px-4">
+          <div className="max-w-4xl mx-auto text-center space-y-6">
+            <div className={`mx-auto w-fit text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${style.accentBorder} ${style.accentText} bg-white shadow-sm flex items-center gap-1`}>
+              <Award className="w-3.5 h-3.5" /> Official Patient Portal
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-black text-slate-900 leading-tight tracking-tight">{headline}</h1>
+            <p className="text-sm sm:text-base text-slate-500 leading-relaxed max-w-2xl mx-auto font-light">{subheadline}</p>
+            <div className="flex justify-center gap-4 pt-3">
+              <button
+                onClick={() => { setSelectedDoctor(doctorsList[0]?.name || ''); setIsBookingOpen(true); }}
+                className={`text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl shadow-md cursor-pointer transition-all ${style.accentBg}`}
+              >
+                Book Appointment
+              </button>
+              <a href="#contact" className="text-xs sm:text-sm font-bold px-6 py-3.5 rounded-xl border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 cursor-pointer transition-all flex items-center gap-1.5">
+                <Phone className="w-4 h-4 text-slate-400" /> Contact Clinic
+              </a>
+            </div>
+          </div>
+        </header>
+      )}
 
       {/* Main Content Grid */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-12 space-y-16">
-        
-        {/* 3. Services Offered Section */}
-        <section id="services" className="space-y-6">
-          <div className="text-center">
-            <h2 className="text-xl font-extrabold text-slate-950">Clinical Specialties & Services</h2>
-            <p className="text-xs text-slate-500 mt-1 font-light">Certified treatments available at our {clinicName} branch.</p>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {servicesList.map((service, index) => (
-              <div key={service} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm space-y-3 hover:-translate-y-0.5 transition-transform duration-300">
-                <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${style.accentBgLight}`}>
-                  0{index + 1}
-                </span>
-                <h3 className="font-bold text-sm text-slate-900">{service}</h3>
-                <p className="text-[11px] text-slate-500 font-light leading-relaxed">
-                  Scheduled consultation slot inclusions, prescription writing, and dynamic monitoring.
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* 3. Services Offered Section */}
+        {servicesList.length > 0 && (
+          <section id="services" className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-xl font-extrabold text-slate-950">Clinical Specialties & Services</h2>
+              <p className="text-xs text-slate-500 mt-1 font-light">Certified treatments available at our {clinicName} branch.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {servicesList.map((service, index) => (
+                <div key={service} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm space-y-3 hover:-translate-y-0.5 transition-transform duration-300">
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${style.accentBgLight}`}>0{index + 1}</span>
+                  <h3 className="font-bold text-sm text-slate-900">{service}</h3>
+                  <p className="text-[11px] text-slate-500 font-light leading-relaxed">
+                    Scheduled consultation slot inclusions, prescription writing, and dynamic monitoring.
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* 4. Meet Doctors Section */}
-        <section id="doctors" className="space-y-6">
-          <div className="text-center">
-            <h2 className="text-xl font-extrabold text-slate-950">Our Specialty Care Physicians</h2>
-            <p className="text-xs text-slate-500 mt-1 font-light">Directly schedule your slot with our board-certified clinical experts.</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {doctorsList.map((doc) => (
-              <div key={doc.name} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm flex gap-4 items-center">
-                <img
-                  src={doc.image}
-                  alt={doc.name}
-                  className="w-16 h-16 rounded-full object-cover border-2 border-slate-100 shadow-sm"
-                />
-                <div className="space-y-1.5 flex-1">
-                  <div>
-                    <h3 className="font-extrabold text-sm text-slate-900">{doc.name}</h3>
-                    <p className="text-[10px] text-slate-500 font-semibold uppercase">{doc.specialty}</p>
+        {doctorsList.length > 0 && (
+          <section id="doctors" className="space-y-6">
+            <div className="text-center">
+              <h2 className="text-xl font-extrabold text-slate-950">Our Specialty Care Physicians</h2>
+              <p className="text-xs text-slate-500 mt-1 font-light">Directly schedule your slot with our board-certified clinical experts.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+              {doctorsList.map((doc) => (
+                <div key={doc.name} className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm flex gap-4 items-center">
+                  <img src={doc.image} alt={doc.name} className="w-16 h-16 rounded-full object-cover border-2 border-slate-100 shadow-sm" />
+                  <div className="space-y-1.5 flex-1">
+                    <div>
+                      <h3 className="font-extrabold text-sm text-slate-900">{doc.name}</h3>
+                      <p className="text-[10px] text-slate-500 font-semibold uppercase">{doc.specialty}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="flex text-amber-400">
+                        {[...Array(5)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-current" />)}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400">5.0 (40+ reviews)</span>
+                    </div>
+                    <button
+                      onClick={() => { setSelectedDoctor(doc.name); setIsBookingOpen(true); }}
+                      className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer w-fit ${style.accentBg}`}
+                    >
+                      Select & Book
+                    </button>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="flex text-amber-400">
-                      {[...Array(5)].map((_, i) => <Star key={i} className="w-3.5 h-3.5 fill-current" />)}
-                    </span>
-                    <span className="text-[9px] font-bold text-slate-400">5.0 (40+ reviews)</span>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedDoctor(doc.name);
-                      setIsBookingOpen(true);
-                    }}
-                    className={`text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer w-fit ${style.accentBg}`}
-                  >
-                    Select & Book
-                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
-        {/* 5. Why Choose Us Section */}
+        {/* 5. Facility (building) Section */}
+        {cfg.building && (
+          <section className="space-y-4">
+            <div className="flex items-center gap-2 justify-center">
+              <Building2 className={`w-5 h-5 ${style.accentText}`} />
+              <h2 className="text-xl font-extrabold text-slate-950">Our Facility</h2>
+            </div>
+            <img src={cfg.building} alt="Clinic building" className="w-full h-72 object-cover rounded-xl border border-slate-100 shadow-sm" />
+          </section>
+        )}
+
+        {/* 6. Why Choose Us Section */}
         <section className="bg-white rounded-xl border border-slate-100 p-8 shadow-sm flex flex-col md:flex-row items-center gap-8">
           <div className="flex-1 space-y-4">
             <h2 className="text-xl font-black text-slate-900 tracking-tight">Integrating Clinical Systems & Patient Care</h2>
             <p className="text-xs text-slate-500 leading-relaxed font-light">
-              We leverage ClinicOS, a premium multi-tenant clinic management system, to organize your prescriptions, scheduling lines, and invoice history seamlessly.
+              We leverage Careme, a premium multi-tenant clinic management system, to organize your prescriptions, scheduling lines, and invoice history seamlessly.
             </p>
             <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} />
-                <span className="text-xs font-semibold text-slate-700">Digital Rx Prescriptions</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} />
-                <span className="text-xs font-semibold text-slate-700">Instant Check-In Queues</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} />
-                <span className="text-xs font-semibold text-slate-700">Secure Vitals Logs</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} />
-                <span className="text-xs font-semibold text-slate-700">WhatsApp reminders</span>
-              </div>
+              <div className="flex items-center gap-2"><CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} /><span className="text-xs font-semibold text-slate-700">Digital Rx Prescriptions</span></div>
+              <div className="flex items-center gap-2"><CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} /><span className="text-xs font-semibold text-slate-700">Instant Check-In Queues</span></div>
+              <div className="flex items-center gap-2"><CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} /><span className="text-xs font-semibold text-slate-700">Secure Vitals Logs</span></div>
+              <div className="flex items-center gap-2"><CheckCircle2 className={`w-4 h-4 shrink-0 ${style.accentText}`} /><span className="text-xs font-semibold text-slate-700">WhatsApp reminders</span></div>
             </div>
           </div>
           <div className="w-full md:w-[350px] aspect-[4/3] bg-slate-50 rounded-lg border border-slate-100 flex items-center justify-center p-6 text-center">
@@ -264,50 +262,45 @@ export default function PublicLandingPage() {
           </div>
         </section>
 
-        {/* 6. Contact Coordinates & Details */}
+        {/* 7. About Section */}
+        {cfg.about && (
+          <section className="bg-white rounded-xl border border-slate-100 p-8 shadow-sm text-center space-y-3">
+            <h2 className="text-xl font-extrabold text-slate-950">About Us</h2>
+            <p className="text-xs text-slate-500 leading-relaxed font-light max-w-2xl mx-auto">{cfg.about}</p>
+          </section>
+        )}
+
+        {/* 8. Contact Coordinates & Details */}
         <section id="contact" className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
           <div className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm text-center space-y-2">
             <MapPin className={`w-6 h-6 mx-auto ${style.accentText}`} />
             <h3 className="font-bold text-xs text-slate-900">Clinic Address</h3>
-            <p className="text-[11px] text-slate-500 font-light leading-relaxed">
-              123 Medical Plaza Boulevard, Suite 400<br />New York, NY 10001
-            </p>
+            <p className="text-[11px] text-slate-500 font-light leading-relaxed whitespace-pre-line">{contact.address || '—'}</p>
           </div>
-
           <div className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm text-center space-y-2">
             <Phone className={`w-6 h-6 mx-auto ${style.accentText}`} />
             <h3 className="font-bold text-xs text-slate-900">Telephone Lines</h3>
-            <p className="text-[11px] text-slate-500 font-light leading-relaxed">
-              Main Office: +1 (555) 901-2345<br />Urgent Care Desk: +1 (555) 901-9988
-            </p>
+            <p className="text-[11px] text-slate-500 font-light leading-relaxed whitespace-pre-line">{contact.phone || '—'}</p>
           </div>
-
           <div className="bg-white rounded-xl border border-slate-100 p-5 shadow-sm text-center space-y-2">
             <Clock className={`w-6 h-6 mx-auto ${style.accentText}`} />
             <h3 className="font-bold text-xs text-slate-900">Operating Hours</h3>
-            <p className="text-[11px] text-slate-500 font-light leading-relaxed">
-              Mon - Fri: 8:00 AM - 6:00 PM<br />Sat: 9:00 AM - 2:00 PM (Sun Closed)
-            </p>
+            <p className="text-[11px] text-slate-500 font-light leading-relaxed whitespace-pre-line">{contact.hours || '—'}</p>
           </div>
         </section>
       </main>
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-100 py-8 px-4 mt-12 text-center text-text-muted text-[10px] font-semibold">
-        <p>© 2026 {clinicName}. Renders by ClinicOS. All rights reserved.</p>
+        <p>© 2026 {clinicName}. Renders by Careme. All rights reserved.</p>
       </footer>
 
       {/* Booking Overlay Modal */}
       {isBookingOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl border border-slate-100 max-w-md w-full p-6 shadow-2xl relative space-y-4">
-            
-            {/* Close button */}
             <button
-              onClick={() => {
-                setIsBookingOpen(false);
-                setBookingSuccess(false);
-              }}
+              onClick={() => { setIsBookingOpen(false); setBookingSuccess(false); }}
               className="absolute right-4 top-4 text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-50 rounded-lg cursor-pointer"
             >
               <X className="w-4 h-4" />
@@ -326,12 +319,7 @@ export default function PublicLandingPage() {
                   A verification link & calendar invite has been sent to your email.
                 </div>
                 <button
-                  onClick={() => {
-                    setIsBookingOpen(false);
-                    setBookingSuccess(false);
-                    setPatientName('');
-                    setPatientEmail('');
-                  }}
+                  onClick={() => { setIsBookingOpen(false); setBookingSuccess(false); setPatientName(''); setPatientEmail(''); }}
                   className={`text-xs font-bold w-full py-2.5 rounded-lg cursor-pointer ${style.accentBg}`}
                 >
                   Close Window
@@ -351,14 +339,8 @@ export default function PublicLandingPage() {
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">Your Full Name *</label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        required
-                        value={patientName}
-                        onChange={(e) => setPatientName(e.target.value)}
-                        placeholder="Liam Brown"
-                        className={`w-full text-xs border border-slate-200 rounded-lg pl-9 pr-3 py-2 outline-none ${style.accentRing}`}
-                      />
+                      <input type="text" required value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Liam Brown"
+                        className={`w-full text-xs border border-slate-200 rounded-lg pl-9 pr-3 py-2 outline-none ${style.accentRing}`} />
                     </div>
                   </div>
 
@@ -366,48 +348,29 @@ export default function PublicLandingPage() {
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">Your Email Address *</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="email"
-                        required
-                        value={patientEmail}
-                        onChange={(e) => setPatientEmail(e.target.value)}
-                        placeholder="liam.brown@example.com"
-                        className={`w-full text-xs border border-slate-200 rounded-lg pl-9 pr-3 py-2 outline-none ${style.accentRing}`}
-                      />
+                      <input type="email" required value={patientEmail} onChange={(e) => setPatientEmail(e.target.value)} placeholder="liam.brown@example.com"
+                        className={`w-full text-xs border border-slate-200 rounded-lg pl-9 pr-3 py-2 outline-none ${style.accentRing}`} />
                     </div>
                   </div>
 
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 block mb-1">Selected Physician *</label>
-                    <select
-                      value={selectedDoctor}
-                      onChange={(e) => setSelectedDoctor(e.target.value)}
-                      className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2.5 outline-none bg-white ${style.accentRing}`}
-                    >
-                      {doctorsList.map(doc => (
-                        <option key={doc.name} value={doc.name}>{doc.name} ({doc.specialty})</option>
-                      ))}
+                    <select value={selectedDoctor} onChange={(e) => setSelectedDoctor(e.target.value)}
+                      className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2.5 outline-none bg-white ${style.accentRing}`}>
+                      {doctorsList.map(doc => (<option key={doc.name} value={doc.name}>{doc.name} ({doc.specialty})</option>))}
                     </select>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 block mb-1">Preferred Date *</label>
-                      <input
-                        type="date"
-                        required
-                        value={preferredDate}
-                        onChange={(e) => setPreferredDate(e.target.value)}
-                        className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-none bg-white ${style.accentRing}`}
-                      />
+                      <input type="date" required value={preferredDate} onChange={(e) => setPreferredDate(e.target.value)}
+                        className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2 outline-none bg-white ${style.accentRing}`} />
                     </div>
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 block mb-1">Preferred Time *</label>
-                      <select
-                        value={preferredTime}
-                        onChange={(e) => setPreferredTime(e.target.value)}
-                        className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2.5 outline-none bg-white ${style.accentRing}`}
-                      >
+                      <select value={preferredTime} onChange={(e) => setPreferredTime(e.target.value)}
+                        className={`w-full text-xs border border-slate-200 rounded-lg px-2.5 py-2.5 outline-none bg-white ${style.accentRing}`}>
                         <option value="09:00 AM">09:00 AM</option>
                         <option value="10:30 AM">10:30 AM</option>
                         <option value="01:00 PM">01:00 PM</option>
@@ -416,10 +379,7 @@ export default function PublicLandingPage() {
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    className={`text-xs font-bold w-full py-3 rounded-lg shadow-sm cursor-pointer transition-colors mt-2 ${style.accentBg}`}
-                  >
+                  <button type="submit" className={`text-xs font-bold w-full py-3 rounded-lg shadow-sm cursor-pointer transition-colors mt-2 ${style.accentBg}`}>
                     Confirm Booking Reservation
                   </button>
                 </form>

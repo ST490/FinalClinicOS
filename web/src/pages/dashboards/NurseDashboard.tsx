@@ -1,8 +1,57 @@
-import { nurseQueueAppointments } from '../../mockData';
+import { useState } from 'react';
 import Badge from '../../components/ui/Badge';
 import { Send, Plus } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useApiQuery } from '../../lib/useApiQuery';
+import { appointmentApi } from '../../lib/appointments';
+import { prescriptionApi } from '../../lib/prescriptions';
 
 export default function NurseDashboard() {
+  const { clinic } = useAuth();
+  const [selectedAptId, setSelectedAptId] = useState<string | null>(null);
+
+  // Today's date range
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // Fetch today's appointments (clinic-wide)
+  const { data: appointmentsData } = useApiQuery(
+    () =>
+      appointmentApi.list({
+        clinicId: clinic?.id,
+        fromDate: todayStart.toISOString(),
+        toDate: todayEnd.toISOString(),
+        limit: 100,
+      }),
+    { skip: !clinic?.id },
+  );
+
+  // Fetch recent prescriptions
+  const { data: prescriptionsData } = useApiQuery(
+    () => prescriptionApi.list({ clinicId: clinic?.id, limit: 5 }),
+    { skip: !clinic?.id }
+  );
+
+  const displayAppointments = (appointmentsData?.data || []).map((apt) => {
+    const timeStr = new Date(apt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return {
+      id: apt.id,
+      time: timeStr,
+      patientName: apt.patient?.name || 'Unknown Patient',
+      waitTime: '0 mins',
+      doctorName: apt.doctor?.name || 'Not Assigned',
+      reason: apt.notes || 'Consultation',
+      category: apt.category,
+      status: apt.status === 'BOOKED' ? 'WAITING' : apt.status,
+    };
+  });
+
+  const displayPrescriptions = prescriptionsData?.data || [];
+
+  const selectedApt = displayAppointments.find(a => a.id === selectedAptId) || displayAppointments[0] || null;
+
   return (
     <div className="space-y-0 animate-fade-in">
       <h1 className="text-xl font-bold text-text-primary mb-5">
@@ -26,41 +75,66 @@ export default function NurseDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
-                {nurseQueueAppointments.map((apt) => {
-                  const statusVariant = ({
-                    WAITING: 'warning' as const,
-                    CHECKED_IN: 'info' as const,
-                    IN_PROGRESS: 'success' as const,
-                  } as Record<string, 'warning' | 'info' | 'success'>)[apt.status] || 'neutral' as const;
-                  const statusLabel = ({
-                    WAITING: 'Waiting',
-                    CHECKED_IN: 'Checked In',
-                    IN_PROGRESS: 'In Progress',
-                  } as Record<string, string>)[apt.status] || apt.status;
+                {displayAppointments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-text-muted italic">
+                      No patients in queue for today
+                    </td>
+                  </tr>
+                ) : (
+                  displayAppointments.map((apt) => {
+                    const statusVariant = ({
+                      WAITING: 'warning' as const,
+                      CHECKED_IN: 'info' as const,
+                      IN_PROGRESS: 'success' as const,
+                    } as Record<string, 'warning' | 'info' | 'success'>)[apt.status] || 'neutral' as const;
+                    const statusLabel = ({
+                      WAITING: 'Waiting',
+                      CHECKED_IN: 'Checked In',
+                      IN_PROGRESS: 'In Progress',
+                    } as Record<string, string>)[apt.status] || apt.status;
 
-                  return (
-                    <tr key={apt.id} className="hover:bg-surface/50 transition-colors">
-                      <td className="px-4 py-3 text-text-primary font-medium whitespace-nowrap">{apt.time}</td>
-                      <td className="px-4 py-3 text-text-primary font-medium">{apt.patientName}</td>
-                      <td className="px-4 py-3 text-text-secondary">{apt.waitTime}</td>
-                      <td className="px-4 py-3 text-text-secondary whitespace-nowrap">{apt.doctorName}</td>
-                      <td className="px-4 py-3 text-text-secondary">{apt.reason}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={statusVariant}>{statusLabel}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <button className="text-[11px] font-medium text-primary-600 hover:text-primary-700 hover:underline transition-colors">
-                            [Record Vitals]
-                          </button>
-                          <button className="text-[11px] font-medium text-text-secondary hover:text-primary-600 hover:underline transition-colors">
-                            [View History]
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                    const isSelected = selectedApt?.id === apt.id;
+
+                    return (
+                      <tr
+                        key={apt.id}
+                        onClick={() => setSelectedAptId(apt.id)}
+                        className={`hover:bg-surface/50 transition-colors cursor-pointer ${isSelected ? 'bg-primary-50/20' : ''}`}
+                      >
+                        <td className="px-4 py-3 text-text-primary font-medium whitespace-nowrap">{apt.time}</td>
+                        <td className="px-4 py-3 text-text-primary font-medium">{apt.patientName}</td>
+                        <td className="px-4 py-3 text-text-secondary">{apt.waitTime}</td>
+                        <td className="px-4 py-3 text-text-secondary whitespace-nowrap">{apt.doctorName}</td>
+                        <td className="px-4 py-3 text-text-secondary">
+                          {apt.reason}
+                          {apt.category === 'FIRST_TIME' && (
+                            <span className="ml-1 text-[10px] font-semibold text-primary-700">• New</span>
+                          )}
+                          {apt.category === 'FREE_CHECKUP' && (
+                            <span className="ml-1 text-[10px] font-semibold text-emerald-700">• Free</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={statusVariant}>{statusLabel}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setSelectedAptId(apt.id)}
+                              className="text-[11px] font-medium text-primary-600 hover:text-primary-700 hover:underline transition-colors"
+                            >
+                              [Record Vitals]
+                            </button>
+                            <button className="text-[11px] font-medium text-text-secondary hover:text-primary-600 hover:underline transition-colors">
+                              [View History]
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -74,24 +148,30 @@ export default function NurseDashboard() {
               <h3 className="text-sm font-semibold text-text-primary">Patient Details</h3>
               <button className="text-text-muted hover:text-text-secondary text-xs">•••</button>
             </div>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-300 to-primary-500 flex items-center justify-center text-white text-sm font-semibold">
-                LB
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Liam Brown</p>
-                <p className="text-xs text-text-muted">DOB: Diav 26, 1983</p>
-                <p className="text-xs text-text-muted">ID: 02334556</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button className="flex-1 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2 rounded-lg transition-colors">
-                Check In
-              </button>
-              <button className="flex-1 text-xs font-semibold text-text-primary bg-surface hover:bg-slate-200 py-2 rounded-lg border border-border transition-colors">
-                Check Out
-              </button>
-            </div>
+            {selectedApt ? (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-11 h-11 rounded-full bg-gradient-to-br from-primary-300 to-primary-500 flex items-center justify-center text-white text-sm font-semibold">
+                    {selectedApt.patientName.split(' ').map((n) => n[0]).join('')}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">{selectedApt.patientName}</p>
+                    <p className="text-xs text-text-muted">Reason: {selectedApt.reason}</p>
+                    <p className="text-xs text-text-muted">ID: {selectedApt.id.slice(0, 8)}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2 rounded-lg transition-colors cursor-pointer">
+                    Check In
+                  </button>
+                  <button className="flex-1 text-xs font-semibold text-text-primary bg-surface hover:bg-slate-200 py-2 rounded-lg border border-border transition-colors cursor-pointer">
+                    Check Out
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-text-muted italic py-4 text-center">No patient selected</p>
+            )}
           </div>
 
           {/* Add History Entry */}
@@ -115,12 +195,12 @@ export default function NurseDashboard() {
               <div>
                 <label className="text-xs font-medium text-text-secondary block mb-1">Notes</label>
                 <textarea
-                  placeholder="Add your itch text here..."
+                  placeholder="Add your notes here..."
                   rows={3}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all resize-none"
                 />
               </div>
-              <button className="w-full text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors">
+              <button className="w-full text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors cursor-pointer">
                 Save Entry
               </button>
             </div>
@@ -133,12 +213,20 @@ export default function NurseDashboard() {
               <button className="text-text-muted hover:text-text-secondary text-xs">•••</button>
             </div>
             <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="p-2 rounded-lg bg-surface/70 border border-border-light">
-                  <p className="text-xs font-medium text-text-primary">Amoxicillin 500mg – 1 week</p>
-                  <p className="text-[10px] text-text-muted">Dr. A. Thorne | [Date issued]</p>
-                </div>
-              ))}
+              {displayPrescriptions.length === 0 ? (
+                <p className="text-xs text-text-muted italic py-4 text-center">No recent prescriptions</p>
+              ) : (
+                (displayPrescriptions as any[]).map((rx) => (
+                  <div key={rx.id} className="p-2 rounded-lg bg-surface/70 border border-border-light">
+                    <p className="text-xs font-medium text-text-primary">
+                      {rx.items.map((it: any) => `${it.medicineName} ${it.dosage}`).join(', ')}
+                    </p>
+                    <p className="text-[10px] text-text-muted">
+                      {rx.doctorName || 'Doctor'} | {new Date(rx.createdAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -201,7 +289,7 @@ export default function NurseDashboard() {
                   </div>
                 </div>
               </div>
-              <button className="w-full text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors">
+              <button className="w-full text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors cursor-pointer">
                 Save Vitals
               </button>
             </div>
@@ -221,11 +309,11 @@ export default function NurseDashboard() {
                 <p key={i} className="text-xs text-text-secondary">{reminder}</p>
               ))}
             </div>
-            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-success hover:bg-emerald-600 py-2.5 rounded-lg transition-colors mb-2">
+            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-success hover:bg-emerald-600 py-2.5 rounded-lg transition-colors mb-2 cursor-pointer">
               <Send className="w-3 h-3" />
               Send WhatsApp Follow-up
             </button>
-            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-text-secondary hover:text-primary-600 py-2 rounded-lg border border-border hover:border-primary-300 transition-colors">
+            <button className="w-full flex items-center justify-center gap-1.5 text-xs font-medium text-text-secondary hover:text-primary-600 py-2 rounded-lg border border-border hover:border-primary-300 transition-colors cursor-pointer">
               <Plus className="w-3 h-3" />
               Trigger New Reminder
             </button>

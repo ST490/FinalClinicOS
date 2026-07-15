@@ -1,11 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   User, Search, Plus, ChevronRight, Phone, Mail, Calendar,
   Heart, AlertTriangle, Clock, FileText, Activity, Pill, X,
-  CheckCircle2, UserCheck, TrendingUp, Users, 
-  MapPin, Droplets, Weight, Thermometer, Building2
+  CheckCircle2, UserCheck, TrendingUp, Users,
+  MapPin, Droplets, Weight, Thermometer, Building2, Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { patientApi } from '../lib/patients';
+import { useApiQuery, apiMutate } from '../lib/useApiQuery';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import ErrorBanner from '../components/ui/ErrorBanner';
 
 // ─── Types ───────────────────────────────────────────────
 type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
@@ -55,225 +59,13 @@ interface Patient {
   emergencyContact: string;
 }
 
-// ─── Mock Patient Data ─────────────────────────────────────
-const PATIENTS: Patient[] = [
-  {
-    id: 'PAT-0041',
-    name: 'Liam Brown',
-    age: 45,
-    gender: 'Male',
-    dob: '1979-03-12',
-    phone: '+1 (555) 201-4411',
-    email: 'liam.brown@email.com',
-    bloodGroup: 'O+',
-    address: '14 Maple Ave, Brooklyn, NY 11201',
-    clinic: 'Downtown Specialty Clinic',
-    status: 'Critical',
-    allergies: ['Penicillin', 'Aspirin'],
-    conditions: ['Type 2 Diabetes', 'Hypertension', 'CAD'],
-    lastVisit: '2025-06-28',
-    nextAppointment: '2025-07-08',
-    totalVisits: 34,
-    outstandingDues: 280,
-    registeredOn: '2022-01-15',
-    insurance: 'BlueCross BlueShield',
-    emergencyContact: 'Emma Brown — +1 (555) 201-4412',
-    currentMeds: ['Metformin 500mg', 'Amlodipine 5mg', 'Atorvastatin 20mg'],
-    vitals: [
-      { date: '2025-06-28', bp: '148/92', temp: '98.9°F', pulse: 88, weight: '194 lbs', spo2: '96%' },
-      { date: '2025-06-10', bp: '152/96', temp: '98.6°F', pulse: 92, weight: '196 lbs', spo2: '95%' },
-    ],
-    recentVisits: [
-      { date: '2025-06-28', doctor: 'Dr. Eleanor Vance', diagnosis: 'HTN Follow-up', notes: 'BP elevated — increased Amlodipine dose. Referred for cardiac echo.', clinic: 'Downtown Specialty Clinic' },
-      { date: '2025-06-10', doctor: 'Dr. Eleanor Vance', diagnosis: 'Diabetes Review', notes: 'HbA1c at 7.9%. Adjusted Metformin to 1000mg. Diet counselling given.', clinic: 'Downtown Specialty Clinic' },
-    ],
-  },
-  {
-    id: 'PAT-0052',
-    name: 'Amara Diallo',
-    age: 29,
-    gender: 'Female',
-    dob: '1996-07-20',
-    phone: '+1 (555) 342-0918',
-    email: 'amara.d@email.com',
-    bloodGroup: 'B+',
-    address: '88 Orchard St, Manhattan, NY 10002',
-    clinic: 'Westside Family Practice',
-    status: 'Active',
-    allergies: ['Sulfa drugs'],
-    conditions: ['Asthma (mild intermittent)', 'Iron deficiency anemia'],
-    lastVisit: '2025-06-25',
-    nextAppointment: '2025-07-15',
-    totalVisits: 12,
-    outstandingDues: 0,
-    registeredOn: '2023-03-08',
-    insurance: 'Aetna',
-    emergencyContact: 'Moussa Diallo — +1 (555) 342-0919',
-    currentMeds: ['Ferrous Sulfate 325mg', 'Salbutamol inhaler PRN'],
-    vitals: [
-      { date: '2025-06-25', bp: '110/72', temp: '98.2°F', pulse: 74, weight: '128 lbs', spo2: '99%' },
-      { date: '2025-05-18', bp: '108/70', temp: '98.4°F', pulse: 76, weight: '127 lbs', spo2: '98%' },
-    ],
-    recentVisits: [
-      { date: '2025-06-25', doctor: 'Dr. Emily Chen', diagnosis: 'Routine check + anemia f/u', notes: 'Hemoglobin improving — 10.8 g/dL. Continue iron supplementation. Asthma stable.', clinic: 'Westside Family Practice' },
-    ],
-  },
-  {
-    id: 'PAT-0038',
-    name: 'James K. Winters',
-    age: 61,
-    gender: 'Male',
-    dob: '1964-11-03',
-    phone: '+1 (555) 487-3320',
-    email: 'jwinters@email.com',
-    bloodGroup: 'AB+',
-    address: '22 Liberty St, Queens, NY 11432',
-    clinic: 'Northside Urgent Care',
-    status: 'Active',
-    allergies: [],
-    conditions: ['COPD (moderate)', 'Osteoarthritis — bilateral knees'],
-    lastVisit: '2025-07-01',
-    nextAppointment: null,
-    totalVisits: 58,
-    outstandingDues: 145,
-    registeredOn: '2019-08-22',
-    insurance: 'Medicare',
-    emergencyContact: 'Gloria Winters — +1 (555) 487-3321',
-    currentMeds: ['Tiotropium inhaler', 'Fluticasone/Salmeterol inhaler', 'Naproxen 500mg PRN'],
-    vitals: [
-      { date: '2025-07-01', bp: '128/82', temp: '98.6°F', pulse: 82, weight: '209 lbs', spo2: '93%' },
-      { date: '2025-06-05', bp: '132/86', temp: '98.5°F', pulse: 85, weight: '211 lbs', spo2: '92%' },
-    ],
-    recentVisits: [
-      { date: '2025-07-01', doctor: 'Dr. Raj Patel', diagnosis: 'COPD exacerbation (mild)', notes: 'SpO2 dipped to 91% on walk test. Adjusted bronchodilator. No hospitalization required.', clinic: 'Northside Urgent Care' },
-      { date: '2025-06-05', doctor: 'Dr. Raj Patel', diagnosis: 'Knee pain review', notes: 'X-ray shows moderate joint space narrowing. Referred to physio.', clinic: 'Northside Urgent Care' },
-    ],
-  },
-  {
-    id: 'PAT-0019',
-    name: 'Priya Nair',
-    age: 34,
-    gender: 'Female',
-    dob: '1991-02-14',
-    phone: '+1 (555) 610-2278',
-    email: 'priya.nair@email.com',
-    bloodGroup: 'A+',
-    address: '5 Hillside Blvd, Bronx, NY 10453',
-    clinic: 'East Valley Health',
-    status: 'Active',
-    allergies: ['Latex', 'Codeine'],
-    conditions: ['Migraine', 'Polycystic Ovary Syndrome (PCOS)'],
-    lastVisit: '2025-06-19',
-    nextAppointment: '2025-07-22',
-    totalVisits: 21,
-    outstandingDues: 0,
-    registeredOn: '2021-09-01',
-    insurance: 'United Health',
-    emergencyContact: 'Ravi Nair — +1 (555) 610-2279',
-    currentMeds: ['Metformin 500mg (for PCOS)', 'Sumatriptan 50mg PRN', 'Folic Acid 5mg'],
-    vitals: [
-      { date: '2025-06-19', bp: '118/76', temp: '98.3°F', pulse: 68, weight: '143 lbs', spo2: '99%' },
-    ],
-    recentVisits: [
-      { date: '2025-06-19', doctor: 'Dr. Chloe Vance', diagnosis: 'PCOS 6-month review', notes: 'Cycle regularizing. AMH mildly elevated. Continue Metformin and nutritional guidance.', clinic: 'East Valley Health' },
-    ],
-  },
-  {
-    id: 'PAT-0067',
-    name: 'Marcus Adeleke',
-    age: 52,
-    gender: 'Male',
-    dob: '1973-05-30',
-    phone: '+1 (555) 733-1190',
-    email: 'marcus.a@email.com',
-    bloodGroup: 'O-',
-    address: '71 Commerce Blvd, Staten Island, NY 10314',
-    clinic: 'Downtown Specialty Clinic',
-    status: 'Inactive',
-    allergies: [],
-    conditions: ['Hypothyroidism', 'Gout'],
-    lastVisit: '2025-02-11',
-    nextAppointment: null,
-    totalVisits: 9,
-    outstandingDues: 520,
-    registeredOn: '2022-07-14',
-    insurance: 'Cigna',
-    emergencyContact: 'Ngozi Adeleke — +1 (555) 733-1191',
-    currentMeds: ['Levothyroxine 75mcg', 'Allopurinol 100mg'],
-    vitals: [
-      { date: '2025-02-11', bp: '136/88', temp: '98.4°F', pulse: 70, weight: '218 lbs', spo2: '97%' },
-    ],
-    recentVisits: [
-      { date: '2025-02-11', doctor: 'Dr. Eleanor Vance', diagnosis: 'Thyroid review', notes: 'TSH still slightly elevated at 4.8. Increased Levothyroxine to 100mcg. Patient missed last 3 appointments.', clinic: 'Downtown Specialty Clinic' },
-    ],
-  },
-  {
-    id: 'PAT-0081',
-    name: 'Sofia Martinez',
-    age: 8,
-    gender: 'Female',
-    dob: '2017-01-22',
-    phone: '+1 (555) 820-5566',
-    email: 'martinez.fam@email.com',
-    bloodGroup: 'A-',
-    address: '309 Park Row, Manhattan, NY 10038',
-    clinic: 'Westside Family Practice',
-    status: 'Active',
-    allergies: ['Peanuts', 'Tree nuts'],
-    conditions: ['Seasonal allergic rhinitis', 'Food allergy (peanut — EpiPen prescribed)'],
-    lastVisit: '2025-06-30',
-    nextAppointment: '2025-08-01',
-    totalVisits: 16,
-    outstandingDues: 0,
-    registeredOn: '2022-03-10',
-    insurance: 'Aetna (Family Plan)',
-    emergencyContact: 'Maria Martinez (mother) — +1 (555) 820-5567',
-    currentMeds: ['Cetirizine 5mg daily', 'EpiPen Jr (carry always)', 'Fluticasone nasal spray PRN'],
-    vitals: [
-      { date: '2025-06-30', bp: '96/62', temp: '98.6°F', pulse: 90, weight: '52 lbs', spo2: '99%' },
-    ],
-    recentVisits: [
-      { date: '2025-06-30', doctor: 'Dr. Emily Chen', diagnosis: 'Pediatric allergy review', notes: 'Rhinitis well controlled. Peanut allergy still IgE-elevated. Refer to allergist for immunotherapy assessment.', clinic: 'Westside Family Practice' },
-    ],
-  },
-  {
-    id: 'PAT-0093',
-    name: 'David Okonkwo',
-    age: 39,
-    gender: 'Male',
-    dob: '1986-08-08',
-    phone: '+1 (555) 977-4400',
-    email: 'david.ok@email.com',
-    bloodGroup: 'B-',
-    address: '44 Forest Hills Dr, Queens, NY 11375',
-    clinic: 'Northside Urgent Care',
-    status: 'Discharged',
-    allergies: ['Contrast dye'],
-    conditions: ['Appendectomy (post-op — discharged)', 'No chronic conditions'],
-    lastVisit: '2025-06-15',
-    nextAppointment: '2025-07-15',
-    totalVisits: 3,
-    outstandingDues: 0,
-    registeredOn: '2025-05-30',
-    insurance: 'Oscar Health',
-    emergencyContact: 'Chisom Okonkwo — +1 (555) 977-4401',
-    currentMeds: ['Cephalexin 500mg (course ended)', 'Paracetamol 500mg PRN'],
-    vitals: [
-      { date: '2025-06-15', bp: '122/78', temp: '98.1°F', pulse: 72, weight: '178 lbs', spo2: '99%' },
-    ],
-    recentVisits: [
-      { date: '2025-06-15', doctor: 'Dr. Raj Patel', diagnosis: 'Post-appendectomy follow-up', notes: 'Incision healing well. No signs of infection. Cleared for full activity. Next visit in 4 weeks.', clinic: 'Northside Urgent Care' },
-    ],
-  },
-];
-
 // ─── Sub-components ────────────────────────────────────────
 
 const statusConfig: Record<PatientStatus, { color: string; bg: string; dot: string }> = {
-  Active:     { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
-  Inactive:   { color: 'text-slate-600',   bg: 'bg-slate-100 border-slate-200',   dot: 'bg-slate-400' },
-  Critical:   { color: 'text-red-700',     bg: 'bg-red-50 border-red-200',        dot: 'bg-red-500 animate-pulse' },
-  Discharged: { color: 'text-sky-700',     bg: 'bg-sky-50 border-sky-200',        dot: 'bg-sky-500' },
+  Active: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
+  Inactive: { color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200', dot: 'bg-slate-400' },
+  Critical: { color: 'text-red-700', bg: 'bg-red-50 border-red-200', dot: 'bg-red-500 animate-pulse' },
+  Discharged: { color: 'text-sky-700', bg: 'bg-sky-50 border-sky-200', dot: 'bg-sky-500' },
 };
 
 const bloodGroupColor: Record<BloodGroup, string> = {
@@ -364,11 +156,11 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
                   {patient.conditions.length === 0
                     ? <p className="text-sm text-text-secondary">None recorded</p>
                     : patient.conditions.map(c => (
-                        <div key={c} className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
-                          <span className="text-sm text-text-primary">{c}</span>
-                        </div>
-                      ))
+                      <div key={c} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                        <span className="text-sm text-text-primary">{c}</span>
+                      </div>
+                    ))
                   }
                 </div>
                 <div className="bg-surface rounded-xl p-4 border border-border space-y-2">
@@ -376,11 +168,11 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
                   {patient.allergies.length === 0
                     ? <p className="text-sm text-emerald-600 font-semibold flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> None on record</p>
                     : patient.allergies.map(a => (
-                        <div key={a} className="flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-                          <span className="text-sm text-text-primary font-medium">{a}</span>
-                        </div>
-                      ))
+                      <div key={a} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                        <span className="text-sm text-text-primary font-medium">{a}</span>
+                      </div>
+                    ))
                   }
                 </div>
               </div>
@@ -456,19 +248,19 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
                   </div>
                 )
                 : patient.currentMeds.map((med, i) => (
-                    <div key={i} className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-surface/50">
-                      <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
-                        <Pill className="w-4 h-4 text-primary-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-text-primary">{med}</p>
-                        <p className="text-xs text-text-muted">Currently prescribed</p>
-                      </div>
-                      <div className="ml-auto">
-                        <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">Active</span>
-                      </div>
+                  <div key={i} className="flex items-center gap-3 p-3.5 rounded-xl border border-border bg-surface/50">
+                    <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+                      <Pill className="w-4 h-4 text-primary-600" />
                     </div>
-                  ))
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">{med}</p>
+                      <p className="text-xs text-text-muted">Currently prescribed</p>
+                    </div>
+                    <div className="ml-auto">
+                      <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">Active</span>
+                    </div>
+                  </div>
+                ))
               }
             </div>
           )}
@@ -513,8 +305,35 @@ function VitalCard({ label, value, icon }: { label: string; value: string; icon:
 }
 
 // Add New Patient Modal
-function AddPatientModal({ onClose }: { onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', age: '', gender: 'Male', bloodGroup: 'O+', phone: '', email: '', clinic: 'Downtown Specialty Clinic', conditions: '', allergies: '' });
+function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreated?: () => void }) {
+  const { clinics, clinic: authClinic } = useAuth();
+  const [form, setForm] = useState({ name: '', age: '', gender: 'Male', bloodGroup: 'O+', phone: '', email: '', clinic: authClinic?.name ?? '', conditions: '', allergies: '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleCreate = async () => {
+    if (!form.name) { setError('Name is required'); return; }
+    setError('');
+    setSaving(true);
+
+    // Real API call
+    const { error: apiErr } = await apiMutate(() =>
+      patientApi.create({
+        name: form.name,
+        email: form.email || null,
+        phone: form.phone || null,
+        dateOfBirth: null,
+        gender: form.gender || null,
+        bloodType: form.bloodGroup || null,
+        allergies: form.allergies ? form.allergies.split(',').map(s => s.trim()) : [],
+        notes: form.conditions || null,
+      }),
+    );
+    setSaving(false);
+    if (apiErr) { setError(apiErr); return; }
+    onCreated?.();
+    onClose();
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -528,6 +347,12 @@ function AddPatientModal({ onClose }: { onClose: () => void }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {error && (
+          <div className="mx-6 mt-4 flex items-center gap-2 p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />{error}
+          </div>
+        )}
 
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -548,13 +373,13 @@ function AddPatientModal({ onClose }: { onClose: () => void }) {
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Blood Group</label>
               <select value={form.bloodGroup} onChange={e => setForm({ ...form, bloodGroup: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                {['A+','A-','B+','B-','AB+','AB-','O+','O-'].map(g => <option key={g}>{g}</option>)}
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => <option key={g}>{g}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Clinic</label>
               <select value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                {['Downtown Specialty Clinic','Westside Family Practice','Northside Urgent Care','East Valley Health'].map(c => <option key={c}>{c}</option>)}
+                {clinics.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </select>
             </div>
             <div>
@@ -577,10 +402,10 @@ function AddPatientModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-          <button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-text-secondary bg-surface border border-border rounded-xl hover:bg-surface/80 transition-colors">Cancel</button>
-          <button onClick={onClose} className="px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 rounded-xl hover:bg-primary-700 transition-colors flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            Register Patient
+          <button onClick={onClose} disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-text-secondary bg-surface border border-border rounded-xl hover:bg-surface/80 transition-colors disabled:opacity-50">Cancel</button>
+          <button onClick={handleCreate} disabled={saving} className="px-5 py-2.5 text-sm font-semibold text-white bg-primary-600 rounded-xl hover:bg-primary-700 transition-colors flex items-center gap-2 disabled:opacity-50">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {saving ? 'Creating…' : 'Register Patient'}
           </button>
         </div>
       </div>
@@ -590,7 +415,7 @@ function AddPatientModal({ onClose }: { onClose: () => void }) {
 
 // ─── Main Page ─────────────────────────────────────────────
 export default function PatientsPage() {
-  const { user } = useAuth();
+  const { user, clinic: authClinic, clinics } = useAuth();
   const role = user?.role ?? 'DOCTOR';
 
   const [search, setSearch] = useState('');
@@ -599,9 +424,46 @@ export default function PatientsPage() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [refetchKey, setRefetchKey] = useState(0);
 
-  const CLINICS = ['All', 'Downtown Specialty Clinic', 'Westside Family Practice', 'Northside Urgent Care', 'East Valley Health'];
+  const CLINICS = ['All', ...clinics.map(c => c.name)];
   const STATUSES = ['All', 'Active', 'Critical', 'Inactive', 'Discharged'];
+
+  // ── Fetch patients from API ──
+  const { data: apiPatients, loading, error, refetch } = useApiQuery(
+    () => patientApi.list({ search: search || undefined, page: 1, limit: 100 }),
+    { skip: !authClinic?.id, deps: [refetchKey, search, authClinic?.id] },
+  );
+
+  // Map API patients to local Patient shape
+  const PATIENTS: Patient[] = useMemo(() => {
+    if (!apiPatients?.data) return [];
+    return apiPatients.data.map((p, i) => ({
+      id: p.id || `PAT-${i}`,
+      name: p.name,
+      age: p.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0,
+      gender: (p.gender as Gender) || 'Other',
+      dob: p.dateOfBirth || '',
+      phone: p.phone || '',
+      email: p.email || '',
+      bloodGroup: (p.bloodType as BloodGroup) || 'O+',
+      address: '',
+      clinic: authClinic?.name || 'Unknown Clinic',
+      status: 'Active' as PatientStatus,
+      allergies: p.allergies || [],
+      conditions: p.notes ? [p.notes] : [],
+      lastVisit: '',
+      nextAppointment: null,
+      totalVisits: 0,
+      outstandingDues: 0,
+      registeredOn: p.createdAt || '',
+      vitals: [],
+      recentVisits: [],
+      currentMeds: [],
+      insurance: '',
+      emergencyContact: '',
+    }));
+  }, [apiPatients, authClinic]);
 
   const filtered = useMemo(() => {
     return PATIENTS.filter(p => {
@@ -610,7 +472,7 @@ export default function PatientsPage() {
       const matchClinic = clinicFilter === 'All' || p.clinic === clinicFilter;
       return matchSearch && matchStatus && matchClinic;
     });
-  }, [search, statusFilter, clinicFilter]);
+  }, [search, statusFilter, clinicFilter, PATIENTS]);
 
   // Stats
   const stats = {
@@ -620,18 +482,26 @@ export default function PatientsPage() {
     duesOutstanding: PATIENTS.filter(p => p.outstandingDues > 0).length,
   };
 
+  const handlePatientCreated = useCallback(() => {
+    setRefetchKey(k => k + 1);
+  }, []);
+
   const canRegister = ['SUB_MASTER', 'RECEPTIONIST', 'NURSE'].includes(role);
 
   return (
     <div className="space-y-6">
+      {/* Loading / Error states */}
+      {loading && <TableSkeleton rows={5} cols={6} />}
+      {error && <ErrorBanner message={error} onRetry={refetch} />}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Patients</h1>
           <p className="text-sm text-text-secondary mt-0.5">
             {role === 'NURSE' ? 'Patient records, vitals, and care history' :
-             role === 'DOCTOR' ? 'Your assigned patients and clinical records' :
-             'Patient registry and management across clinics'}
+              role === 'DOCTOR' ? 'Your assigned patients and clinical records' :
+                'Patient registry and management across clinics'}
           </p>
         </div>
         {canRegister && (
@@ -859,7 +729,7 @@ export default function PatientsPage() {
       )}
 
       {/* Add Patient Modal */}
-      {showAddModal && <AddPatientModal onClose={() => setShowAddModal(false)} />}
+      {showAddModal && <AddPatientModal onClose={() => setShowAddModal(false)} onCreated={handlePatientCreated} />}
     </div>
   );
 }

@@ -1,9 +1,10 @@
 /**
- * RoleContext — reads the current user from localStorage (set by AuthContext)
- * and exposes role/auth state to all components via useRole().
+ * RoleContext — reads role from AuthContext and exposes it via useRole().
+ * Kept for backward compatibility with all components that already use useRole().
  */
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { UserRole } from '../types';
+import { useAuth } from './AuthContext';
 
 interface RoleContextType {
   role: UserRole;
@@ -15,65 +16,30 @@ interface RoleContextType {
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
-function getStoredRole(): UserRole {
-  try {
-    const stored = localStorage.getItem('mockUser');
-    if (stored) {
-      const user = JSON.parse(stored);
-      return (user.role as UserRole) || 'MASTER';
-    }
-  } catch {}
-  return 'MASTER';
-}
-
-function getStoredAuth(): boolean {
-  try {
-    return !!localStorage.getItem('mockUser');
-  } catch {
-    return false;
-  }
-}
-
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<UserRole>(getStoredRole);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(getStoredAuth);
+  const auth = useAuth();
 
-  // Sync with storage changes (e.g. login/logout from AuthContext)
-  useEffect(() => {
-    const handler = () => {
-      setRoleState(getStoredRole());
-      setIsAuthenticated(getStoredAuth());
-    };
-    window.addEventListener('storage', handler);
-    // Also poll every 500ms for same-tab changes
-    const interval = setInterval(handler, 500);
-    return () => {
-      window.removeEventListener('storage', handler);
-      clearInterval(interval);
-    };
-  }, []);
+  const role = auth.user?.role ?? 'MASTER';
 
   const setRole = (r: UserRole) => {
-    try {
-      const stored = localStorage.getItem('mockUser');
-      if (stored) {
-        const user = JSON.parse(stored);
-        user.role = r;
-        localStorage.setItem('mockUser', JSON.stringify(user));
-      }
-    } catch {}
-    setRoleState(r);
+    auth.switchRole(r);
   };
 
-  const login = () => setIsAuthenticated(true);
   const logout = () => {
-    localStorage.removeItem('mockUser');
-    setIsAuthenticated(false);
-    setRoleState('MASTER');
+    auth.logout();
   };
+
+  // login() is a no-op here — actual login happens via AuthContext
+  const login = () => {};
 
   return (
-    <RoleContext.Provider value={{ role, setRole, isAuthenticated, login, logout }}>
+    <RoleContext.Provider value={{
+      role,
+      setRole,
+      isAuthenticated: auth.isAuthenticated,
+      login,
+      logout,
+    }}>
       {children}
     </RoleContext.Provider>
   );

@@ -5,7 +5,9 @@ import DashboardLayout from './components/layout/DashboardLayout';
 import DashboardPage from './pages/DashboardPage';
 import PlaceholderPage from './pages/PlaceholderPage';
 import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 import AppointmentsPage from './pages/AppointmentsPage';
+import DispensingPage from './pages/DispensingPage';
 import InventoryPage from './pages/InventoryPage';
 import PrescriptionsPage from './pages/PrescriptionsPage';
 import DuesPage from './pages/DuesPage';
@@ -13,7 +15,16 @@ import ReportsPage from './pages/ReportsPage';
 import WhitelabelPage from './pages/WhitelabelPage';
 import PublicLandingPage from './pages/PublicLandingPage';
 import PatientsPage from './pages/PatientsPage';
+import StaffPage from './pages/StaffPage';
+import AttendancePage from './pages/AttendancePage';
+import LeavePage from './pages/LeavePage';
+import StaffDirectoryPage from './pages/StaffDirectoryPage';
+import PayrollPage from './pages/PayrollPage';
+import SchedulingPage from './pages/SchedulingPage';
 import { useAuth } from './context/AuthContext';
+import DemoSwitcher from './components/ui/DemoSwitcher';
+import AcceptInvitePage from './pages/AcceptInvitePage';
+import { SHOW_DEMO_SWITCHER } from './mockData';
 
 function AuthenticatedApp() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -23,20 +34,22 @@ function AuthenticatedApp() {
   return (
     <Routes>
       <Route path="/login" element={isAuthenticated ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/signup" element={isAuthenticated ? <Navigate to="/" replace /> : <SignupPage />} />
+      <Route path="/accept-invite" element={isAuthenticated ? <Navigate to="/" replace /> : <AcceptInvitePage />} />
       <Route path="/public-landing" element={<PublicLandingPage />} />
       <Route element={isAuthenticated ? <DashboardLayout /> : <Navigate to="/login" replace />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/analytics" element={<PlaceholderPage />} />
         <Route path="/clinics" element={<PlaceholderPage />} />
         <Route path="/billing" element={<DuesPage />} />
-        <Route path="/staff" element={<PlaceholderPage />} />
+        <Route path="/staff" element={<StaffPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/settings" element={<PlaceholderPage />} />
         <Route path="/patients" element={<PatientsPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
         <Route path="/whitelabel" element={<WhitelabelPage />} />
-        <Route path="/schedule" element={<AppointmentsPage />} />
+        <Route path="/schedule" element={<SchedulingPage />} />
         <Route path="/calendar" element={<AppointmentsPage />} />
         <Route path="/prescriptions" element={<PrescriptionsPage />} />
         <Route path="/clinical-notes" element={<PlaceholderPage />} />
@@ -46,16 +59,16 @@ function AuthenticatedApp() {
         <Route path="/reminders" element={<PlaceholderPage />} />
         <Route path="/patient-records" element={<PlaceholderPage />} />
         <Route path="/incoming-stock" element={<PlaceholderPage />} />
-        <Route path="/dispensing" element={<PlaceholderPage />} />
+        <Route path="/dispensing" element={<DispensingPage />} />
         <Route path="/intake" element={<PatientsPage />} />
         <Route path="/walkins" element={<PatientsPage />} />
         <Route path="/dues" element={<DuesPage />} />
         <Route path="/waitlist" element={<PlaceholderPage />} />
         <Route path="/wait-times" element={<PlaceholderPage />} />
-        <Route path="/staff-directory" element={<PlaceholderPage />} />
-        <Route path="/attendance" element={<PlaceholderPage />} />
-        <Route path="/payroll" element={<PlaceholderPage />} />
-        <Route path="/leave-requests" element={<PlaceholderPage />} />
+        <Route path="/staff-directory" element={<StaffDirectoryPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/payroll" element={<PayrollPage />} />
+        <Route path="/leave-requests" element={<LeavePage />} />
         <Route path="/onboarding" element={<PlaceholderPage />} />
         <Route path="/role-assignments" element={<PlaceholderPage />} />
         <Route path="*" element={<PlaceholderPage />} />
@@ -70,6 +83,7 @@ export default function App() {
       <BrowserRouter>
         <RoleProvider>
           <AuthenticatedApp />
+          {SHOW_DEMO_SWITCHER && <DemoSwitcher />}
         </RoleProvider>
       </BrowserRouter>
     </AuthProvider>

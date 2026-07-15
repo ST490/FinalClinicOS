@@ -29,6 +29,34 @@ export interface StaffReport {
   present: number;
   absent: number;
   late: number;
+  byDay: { date: string; rate: number; present: number; total: number }[];
+}
+
+export interface PayrollReport {
+  period: string | null;
+  totalNet: number;
+  totalBasic: number;
+  totalOvertime: number;
+  totalDeduction: number;
+  headcount: number;
+  byDepartment: { department: string | null; net: number; count: number }[];
+  byWageType: { wageType: string | null; net: number; count: number }[];
+}
+
+export interface LeaveReport {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  resolutionRate: number;
+  byType: { type: string; count: number }[];
+}
+
+export interface LabourCostReport {
+  period: string | null;
+  totalCost: number;
+  byDepartment: { department: string | null; cost: number; headcount: number }[];
+  byEmploymentType: { employmentType: string; cost: number; headcount: number }[];
 }
 
 export async function getRevenueReport(clinicId: string, fromDate: Date, toDate: Date): Promise<RevenueReport> {
@@ -145,13 +173,140 @@ export async function getInventoryReport(clinicId: string): Promise<InventoryRep
 export async function getStaffReport(clinicId: string, fromDate: Date, toDate: Date): Promise<StaffReport> {
   const records = await prisma.staffAttendance.findMany({
     where: { clinicId, date: { gte: fromDate, lte: toDate } },
-    select: { status: true },
+    select: { date: true, status: true },
   });
 
-  const present = records.filter(r => r.status === 'PRESENT').length;
+  const present = records.filter(r => r.status === 'PRESENT' || r.status === 'LATE').length;
   const late = records.filter(r => r.status === 'LATE').length;
   const absent = records.filter(r => r.status === 'ABSENT').length;
-  const attendanceRate = records.length > 0 ? ((present + late) / records.length) * 100 : 0;
+  const attendanceRate = records.length > 0 ? ((present) / records.length) * 100 : 0;
 
-  return { attendanceRate: Math.round(attendanceRate * 100) / 100, present, absent, late };
+  const byDayMap = new Map<string, { present: number; total: number }>();
+  for (const r of records) {
+    const day = r.date.toISOString().slice(0, 10);
+    const bucket = byDayMap.get(day) || { present: 0, total: 0 };
+    bucket.total++;
+    if (r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'HALF_DAY') bucket.present++;
+    byDayMap.set(day, bucket);
+  }
+  const byDay = Array.from(byDayMap.entries())
+    .map(([date, b]) => ({
+      date,
+      present: b.present,
+      total: b.total,
+      rate: b.total > 0 ? Math.round((b.present / b.total) * 10000) / 100 : 0,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    attendanceRate: Math.round(attendanceRate * 100) / 100,
+    present,
+    absent,
+    late,
+    byDay,
+  };
+}
+
+// Shared payroll aggregation (used by payroll + labour-cost reports).
+async function aggregatePayroll(clinicId: string, period?: string) {
+  const rows = await prisma.payroll.findMany({
+    where: { clinicId, ...(period && { period }) },
+    include: { user: { select: { clinicRoles: true } } },
+  });
+
+  const withMeta = rows.map(r => {
+    const role = (r.user?.clinicRoles || []).find((cr: any) => cr.clinicId === clinicId);
+    return {
+      ...r,
+      department: role?.department ?? null,
+      employmentType: role?.employmentType ?? 'PERMANENT',
+    };
+  });
+  return withMeta;
+}
+
+export async function getPayrollReport(clinicId: string, period?: string): Promise<PayrollReport> {
+  const rows = await aggregatePayroll(clinicId, period);
+  const periodVal = rows[0]?.period ?? null;
+
+  const byDepartmentMap = new Map<string | null, { net: number; count: number }>();
+  const byWageTypeMap = new Map<string | null, { net: number; count: number }>();
+  for (const r of rows) {
+    const d = byDepartmentMap.get(r.department) || { net: 0, count: 0 };
+    d.net += Number(r.net); d.count++;
+    byDepartmentMap.set(r.department, d);
+
+    const w = byWageTypeMap.get(r.wageType ?? null) || { net: 0, count: 0 };
+    w.net += Number(r.net); w.count++;
+    byWageTypeMap.set(r.wageType ?? null, w);
+  }
+
+  return {
+    period: periodVal,
+    totalNet: Math.round(rows.reduce((s, r) => s + Number(r.net), 0) * 100) / 100,
+    totalBasic: Math.round(rows.reduce((s, r) => s + Number(r.basic), 0) * 100) / 100,
+    totalOvertime: Math.round(rows.reduce((s, r) => s + Number(r.overtimePay), 0) * 100) / 100,
+    totalDeduction: Math.round(rows.reduce((s, r) => s + Number(r.deduction) + Number(r.advance), 0) * 100) / 100,
+    headcount: rows.length,
+    byDepartment: Array.from(byDepartmentMap.entries()).map(([department, v]) => ({
+      department, net: Math.round(v.net * 100) / 100, count: v.count,
+    })),
+    byWageType: Array.from(byWageTypeMap.entries()).map(([wageType, v]) => ({
+      wageType, net: Math.round(v.net * 100) / 100, count: v.count,
+    })),
+  };
+}
+
+export async function getLabourCostReport(clinicId: string, period?: string): Promise<LabourCostReport> {
+  const rows = await aggregatePayroll(clinicId, period);
+  const periodVal = rows[0]?.period ?? null;
+
+  const byDeptMap = new Map<string | null, { cost: number; headcount: number }>();
+  const byEmpMap = new Map<string, { cost: number; headcount: number }>();
+  for (const r of rows) {
+    const d = byDeptMap.get(r.department) || { cost: 0, headcount: 0 };
+    d.cost += Number(r.net); d.headcount++;
+    byDeptMap.set(r.department, d);
+
+    const e = byEmpMap.get(r.employmentType) || { cost: 0, headcount: 0 };
+    e.cost += Number(r.net); e.headcount++;
+    byEmpMap.set(r.employmentType, e);
+  }
+
+  return {
+    period: periodVal,
+    totalCost: Math.round(rows.reduce((s, r) => s + Number(r.net), 0) * 100) / 100,
+    byDepartment: Array.from(byDeptMap.entries()).map(([department, v]) => ({
+      department, cost: Math.round(v.cost * 100) / 100, headcount: v.headcount,
+    })),
+    byEmploymentType: Array.from(byEmpMap.entries()).map(([employmentType, v]) => ({
+      employmentType, cost: Math.round(v.cost * 100) / 100, headcount: v.headcount,
+    })),
+  };
+}
+
+export async function getLeaveReport(clinicId: string, fromDate: Date, toDate: Date): Promise<LeaveReport> {
+  const leaves = await prisma.leaveRequest.findMany({
+    where: { clinicId, fromDate: { gte: fromDate }, toDate: { lte: toDate } },
+  });
+
+  const byTypeMap = new Map<string, number>();
+  let pending = 0, approved = 0, rejected = 0;
+  for (const l of leaves) {
+    byTypeMap.set(l.type, (byTypeMap.get(l.type) || 0) + 1);
+    if (l.status === 'PENDING') pending++;
+    else if (l.status === 'APPROVED') approved++;
+    else if (l.status === 'REJECTED') rejected++;
+  }
+  const resolved = approved + rejected;
+  const resolutionRate = resolved > 0 ? Math.round((approved / resolved) * 10000) / 100 : 0;
+
+  return {
+    total: leaves.length,
+    pending,
+    approved,
+    rejected,
+    resolutionRate,
+    byType: Array.from(byTypeMap.entries()).map(([type, count]) => ({ type, count })),
+  };
 }

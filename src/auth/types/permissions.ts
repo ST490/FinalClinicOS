@@ -48,7 +48,10 @@ export type Permission =
   // HR
   | 'attendance:manage'
   | 'attendance:read'
+  | 'leave:manage'
+  | 'leave:read'
   | 'payroll:read'
+  | 'payroll:manage'
 
   // Org-level
   | 'org:manage'            // Master only — billing, plans, etc.
@@ -64,13 +67,13 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
     'prescription:create', 'prescription:read', 'prescription:update', 'prescription:cancel',
     'inventory:manage', 'inventory:read',
     'dues:manage', 'dues:read', 'dues:waive',
-    'attendance:manage', 'attendance:read', 'payroll:read',
+    'attendance:manage', 'attendance:read', 'leave:manage', 'leave:read', 'payroll:read', 'payroll:manage',
     'org:manage', 'org:read',
   ],
 
   SUB_MASTER: [
-    // Full access within their clinic(s)
-    'clinic:manage', 'clinic:read',
+    // Full access within their clinic(s) — but CANNOT create/update/delete clinics (MASTER only)
+    'clinic:read',
     'staff:invite', 'staff:manage', 'staff:read', 'staff:delete',
     'patient:create', 'patient:read', 'patient:update', 'patient:delete',
     'appointment:create', 'appointment:read', 'appointment:update', 'appointment:cancel',
@@ -78,6 +81,8 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
     'inventory:manage', 'inventory:read',
     'dues:manage', 'dues:read', 'dues:waive',
     'attendance:manage', 'attendance:read',
+    'leave:manage', 'leave:read',
+    'payroll:read', 'payroll:manage',
     'org:read',
   ],
 
@@ -86,12 +91,16 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
     'appointment:read', 'appointment:update',
     'prescription:create', 'prescription:read',
     'inventory:read',
+    'clinic:read',
+    'org:read',
   ],
 
   NURSE: [
     'patient:create', 'patient:read', 'patient:update',
     'appointment:create', 'appointment:read', 'appointment:update',
     'inventory:read',
+    'clinic:read',
+    'org:read',
   ],
 
   PHARMACIST: [
@@ -100,19 +109,30 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
     'prescription:read',
     'inventory:manage', 'inventory:read',
     'dues:manage', 'dues:read',
+    'clinic:read',
+    'org:read',
   ],
 
   RECEPTIONIST: [
     'patient:create', 'patient:read',
     'appointment:create', 'appointment:read', 'appointment:update',
     'dues:manage', 'dues:read',
+    'clinic:read',
+    'org:read',
   ],
 
   HR: [
-    // Staff management, attendance, payroll — no clinical/billing access
-    'staff:invite', 'staff:manage', 'staff:read',
+    // Staff management, attendance, leave, payroll — no clinical/billing access
+    'staff:invite', 'staff:manage', 'staff:read', 'staff:delete',
     'attendance:manage', 'attendance:read',
-    'payroll:read',
+    'leave:manage', 'leave:read',
+    'payroll:read', 'payroll:manage',
+    'clinic:read',
+    'org:read',
+  ],
+
+  SUPPORT: [
+    // Non-clinical roster worker, no login — minimal read-only footprint.
     'clinic:read',
     'org:read',
   ],
@@ -140,5 +160,5 @@ export const ROLES = {
   ADMIN: ['MASTER'] as UserRoleType[],
   CLINIC_ADMIN: ['MASTER', 'SUB_MASTER'] as UserRoleType[],
   CLINICAL: ['DOCTOR', 'NURSE'] as UserRoleType[],
-  ALL_STAFF: ['MASTER', 'SUB_MASTER', 'DOCTOR', 'NURSE', 'PHARMACIST', 'RECEPTIONIST', 'HR'] as UserRoleType[],
+  ALL_STAFF: ['MASTER', 'SUB_MASTER', 'DOCTOR', 'NURSE', 'PHARMACIST', 'RECEPTIONIST', 'HR', 'SUPPORT'] as UserRoleType[],
 };

@@ -110,6 +110,8 @@ export interface LoginResponse {
   requires2FA?: boolean;
   tempToken?: string; // For 2FA verification step
   message?: string; // For 2FA enforcement messages
+  isInviteLogin?: boolean; // Signal to frontend to redirect to password setup
+  inviteToken?: string; // Raw token to pre-fill the accept-invite form
 }
 
 export interface RegisterResponse {
@@ -123,6 +125,7 @@ export interface UserProfile {
   phone: string | null;
   name: string;
   orgId: string;
+  orgName?: string | null; // Included for convenience — avoids a separate /orgs/:id call
   isOrgOwner: boolean;
   roles: { clinicId: string | null; role: UserRoleType; clinicName?: string }[];
   twoFactorEnabled: boolean;

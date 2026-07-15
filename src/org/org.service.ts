@@ -167,6 +167,7 @@ export class OrgService {
     const where: Prisma.ClinicWhereInput = {
       deletedAt: null,
       ...(input.orgId && { orgId: input.orgId }),
+      ...(input.clinicIds?.length && { id: { in: input.clinicIds } }),
       ...(input.status && { status: input.status as any }),
     };
 

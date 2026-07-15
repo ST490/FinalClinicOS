@@ -32,7 +32,15 @@ export const billingApi = {
     return res.data;
   },
 
-  create: async (data: { clinicId: string; patientId: string; amountDue: number; dueDate?: string; notes?: string }) => {
+  create: async (data: {
+    clinicId: string;
+    patientId: string;
+    totalAmount: number;
+    amountPaid?: number;
+    paymentMethod?: string;
+    paymentNotes?: string;
+    createdAt?: string;
+  }) => {
     const res = await api.post<Due>('/dues', data);
     return res.data;
   },

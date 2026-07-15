@@ -20,7 +20,7 @@ export const REFRESH_TOKEN_EXPIRES_DAYS = parseInt(process.env.REFRESH_TOKEN_EXP
 // ─────────────────────────────────────────────────────────────────────────────
 // DATABASE
 // ─────────────────────────────────────────────────────────────────────────────
-export const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/clinicos';
+export const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/careme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REDIS
@@ -42,7 +42,7 @@ export const CORS_ORIGINS = process.env.CORS_ORIGINS?.split(',') || ['http://loc
 // ─────────────────────────────────────────────────────────────────────────────
 export const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 // TOTP secret for 2FA
-export const TOTP_ISSUER = process.env.TOTP_ISSUER || 'ClinicOS';
+export const TOTP_ISSUER = process.env.TOTP_ISSUER || 'Careme';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INVITE SETTINGS
@@ -72,11 +72,12 @@ export const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY;
 export const S3_SECRET_KEY = process.env.S3_SECRET_KEY;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TWILIO (for SMS)
+// TWILIO (for SMS & WhatsApp)
 // ─────────────────────────────────────────────────────────────────────────────
 export const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 export const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 export const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+export const TWILIO_WHATSAPP_PHONE_NUMBER = process.env.TWILIO_WHATSAPP_PHONE_NUMBER || '+14155238886'; // Twilio Sandbox default
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WHATSAPP BSP (Interakt, AiSensy, etc.)
@@ -118,6 +119,7 @@ export const config = {
     accountSid: TWILIO_ACCOUNT_SID,
     authToken: TWILIO_AUTH_TOKEN,
     phoneNumber: TWILIO_PHONE_NUMBER,
+    whatsappPhoneNumber: TWILIO_WHATSAPP_PHONE_NUMBER,
   },
   whatsappBsp: {
     apiKey: WHATSAPP_BSP_API_KEY,

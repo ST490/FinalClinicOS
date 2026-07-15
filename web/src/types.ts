@@ -6,7 +6,8 @@ export type UserRole =
   | 'NURSE'
   | 'PHARMACIST'
   | 'RECEPTIONIST'
-  | 'HR';
+  | 'HR'
+  | 'SUPPORT';
 
 // ─── Navigation ───
 export interface NavItem {
@@ -117,6 +118,7 @@ export interface StockItem {
   reorderPoint: number;
   expiry: string;
   status: 'Good' | 'LOW STOCK' | 'EXPIRING SOON';
+  ingredients?: string;
 }
 
 // ─── Pharmacist: Pending Prescription ───

@@ -88,22 +88,41 @@ export function requireRole(...allowedRoles: (UserRoleType | 'MASTER')[]) {
 // CLINIC ACCESS MIDDLEWARE — Verify user can access a specific clinic
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function requireClinicAccess(req: Request, res: Response, next: NextFunction): void {
+export async function requireClinicAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (!req.user) {
     res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Authentication required' } });
     return;
   }
 
-  const clinicId = req.params.clinicId || req.body.clinicId || req.query.clinicId;
-
-  // ORG OWNER can access any clinic in their org
-  if (req.user.isOrgOwner) {
-    next();
-    return;
+  let clinicId = req.params.clinicId || req.body.clinicId || req.query.clinicId;
+  if (!clinicId && req.user.activeClinicId) {
+    clinicId = req.user.activeClinicId;
+    req.query.clinicId = clinicId;
+    req.body.clinicId = clinicId;
   }
 
   if (!clinicId) {
     res.status(400).json({ error: { code: 'CLINIC_ID_REQUIRED', message: 'clinicId is required' } });
+    return;
+  }
+
+  // ORG OWNER can access any clinic in their org
+  if (req.user.isOrgOwner) {
+    try {
+      const clinic = await prisma.clinic.findUnique({ where: { id: clinicId as string } });
+      if (!clinic || clinic.orgId !== req.user.orgId) {
+        res.status(403).json({
+          error: {
+            code: 'CLINIC_ACCESS_DENIED',
+            message: 'You do not have access to this clinic',
+          },
+        });
+        return;
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
     return;
   }
 

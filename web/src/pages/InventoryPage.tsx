@@ -1,8 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Package, AlertTriangle, Plus, Search, ArrowUpRight, ArrowDownLeft, Info } from 'lucide-react';
-import { stockItems } from '../mockData';
-import type { StockItem } from '../types';
 import Badge from '../components/ui/Badge';
+import { useAuth } from '../context/AuthContext';
+import { inventoryApi, CLINICAL_CATEGORIES, type InventoryClinicalCategory, type InventoryItem } from '../lib/inventory';
+import { useApiQuery, apiMutate } from '../lib/useApiQuery';
+
+interface InvRow {
+  id: string;
+  name: string;
+  form: string;
+  currentQty: number;
+  reorderPoint: number;
+  expiry: string;
+  status: 'Good' | 'LOW STOCK' | 'EXPIRING SOON';
+  ingredients?: string;
+  buyPrice?: number | string | null;
+  sellPrice?: number | string | null;
+  margin?: number | null;
+  clinicalCategory: InventoryClinicalCategory;
+  trackingType: InventoryItem['trackingType'];
+  regulatoryClass: InventoryItem['regulatoryClass'];
+}
 
 // Predefined drug list for autocomplete suggestions
 const DRUG_SUGGESTIONS = [
@@ -27,35 +45,76 @@ interface StockMovement {
 }
 
 export default function InventoryPage() {
+  const { clinic: authClinic } = useAuth();
   const [activeTab, setActiveTab] = useState<'levels' | 'history'>('levels');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // Local state for inventory levels
-  const [inventory, setInventory] = useState<StockItem[]>(() => {
-    return stockItems.map((item, idx) => ({
-      ...item,
-      id: item.id || `inv-${idx}`,
+  const [categoryFilter, setCategoryFilter] = useState<InventoryClinicalCategory | 'ALL'>('ALL');
+  const [refetchKey, setRefetchKey] = useState(0);
+
+  // Fetch from API (pharmacists are auto-scoped to PHARMA by the backend)
+  const { data: apiData } = useApiQuery(
+    () => inventoryApi.list({
+      clinicId: authClinic?.id,
+      limit: 100,
+      clinicalCategory: categoryFilter === 'ALL' ? undefined : categoryFilter,
+    }),
+    { skip: !authClinic?.id, deps: [refetchKey, authClinic?.id, categoryFilter] },
+  );
+
+  // Map API data to the table row shape
+  const inventoryItems: InvRow[] = useMemo(() => {
+    if (!apiData?.data) return [];
+    return apiData.data.map((item) => ({
+      id: item.id,
+      name: item.customName || item.medicine?.genericName || 'Item',
+      form: item.dosageForm || 'Tablets',
+      currentQty: item.quantity,
+      reorderPoint: item.reorderThreshold,
+      expiry: item.expiryDate || 'N/A',
+      status: item.quantity <= 0 ? 'LOW STOCK'
+        : item.quantity <= item.reorderThreshold ? 'LOW STOCK'
+          : 'Good',
+      ingredients: item.ingredients || item.medicine?.composition || undefined,
+      buyPrice: item.unitPrice,
+      sellPrice: item.sellingPrice ?? null,
+      margin: item.margin ?? null,
+      clinicalCategory: item.clinicalCategory,
+      trackingType: item.trackingType,
+      regulatoryClass: item.regulatoryClass,
     }));
-  });
+  }, [apiData]);
+
+  // Local state wrapper for compatibility with existing UI code
+  const [inventory, setInventory] = useState<InvRow[]>([]);
+  // Sync API data into local state whenever it changes
+  React.useEffect(() => {
+    setInventory(inventoryItems);
+  }, [inventoryItems]);
 
   // Local state for stock movements
-  const [movements, setMovements] = useState<StockMovement[]>([
-    { id: 'm-1', date: '2026-07-04 10:15 AM', itemName: 'Atorvastatin 20mg Tabs (Capsules)', type: 'DISPENSED', delta: -20, operator: 'Dr. Evelyn Reed' },
-    { id: 'm-2', date: '2026-07-04 09:30 AM', itemName: 'Atorvastatin 20mg Tabs (Tablets)', type: 'RESTOCK', delta: 500, operator: 'Dr. Evelyn Reed' },
-    { id: 'm-3', date: '2026-07-03 02:45 PM', itemName: 'Atorvastatin 20mg Tabs (Syrup)', type: 'CORRECTION', delta: -5, operator: 'Nurse Sarah L.' },
-    { id: 'm-4', date: '2026-07-02 11:20 AM', itemName: 'Ibuprofen 400mg Tabs (Tablets)', type: 'DISPENSED', delta: -50, operator: 'Dr. Eleanor Vance' },
-  ]);
+  const movements: StockMovement[] = [];
 
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
+
   // Form Fields
   const [drugName, setDrugName] = useState('');
+  const [ingredients, setIngredients] = useState('');
   const [formType, setFormType] = useState('Tablets');
   const [qty, setQty] = useState('');
   const [reorder, setReorder] = useState('200');
   const [expiry, setExpiry] = useState('');
-  
+  // Classification
+  const [clinicalCategory, setClinicalCategory] = useState<InventoryClinicalCategory>('PHARMA');
+  const [trackingType, setTrackingType] = useState<InventoryItem['trackingType']>('BULK');
+  const [regulatoryClass, setRegulatoryClass] = useState<InventoryItem['regulatoryClass']>('STANDARD');
+  const [costType, setCostType] = useState<InventoryItem['costType']>('OVERHEAD');
+  const [stockingLevel, setStockingLevel] = useState<InventoryItem['stockingLevel']>('CENTRAL');
+  const [sellingPrice, setSellingPrice] = useState('');
+  const [buyPrice, setBuyPrice] = useState('');
+  const [serialNo, setSerialNo] = useState('');
+  const [consignmentOwner, setConsignmentOwner] = useState('');
+
   // Autocomplete state
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredSuggestions, setFilteredSuggestions] = useState<string[]>([]);
@@ -65,7 +124,7 @@ export default function InventoryPage() {
   const handleDrugNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setDrugName(value);
-    
+
     if (value) {
       const filtered = DRUG_SUGGESTIONS.filter(item =>
         item.toLowerCase().includes(value.toLowerCase())
@@ -83,7 +142,7 @@ export default function InventoryPage() {
   };
 
   // Add Item to Inventory List
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -92,56 +151,67 @@ export default function InventoryPage() {
       return;
     }
 
-    const currentQty = parseInt(qty);
-    const reorderPoint = parseInt(reorder);
+    const currentQty = parseInt(qty, 10);
+    const reorderPoint = parseInt(reorder, 10);
+    const buy = parseFloat(buyPrice) || 0;
 
     if (isNaN(currentQty) || isNaN(reorderPoint)) {
       setError('Quantity and Reorder Point must be valid numbers.');
       return;
     }
 
-    // Determine status badge
-    let status: StockItem['status'] = 'Good';
-    if (currentQty <= reorderPoint) {
-      status = 'LOW STOCK';
+    if (!authClinic?.id) {
+      setError('No active clinic — sign in to a clinic to add items.');
+      return;
     }
-
-    const newId = `inv-${Date.now()}`;
-    const newItem: StockItem = {
-      id: newId,
-      name: drugName,
-      form: formType,
-      currentQty,
-      reorderPoint,
-      expiry,
-      status,
-    };
-
-    // Add to levels
-    setInventory(prev => [newItem, ...prev]);
-
-    // Log movement history
-    const newMovement: StockMovement = {
-      id: `m-${Date.now()}`,
-      date: new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, month: '2-digit', day: '2-digit', year: 'numeric' }),
-      itemName: `${drugName} (${formType})`,
-      type: 'RESTOCK',
-      delta: currentQty,
-      operator: 'Dr. Evelyn Reed',
-    };
-    setMovements(prev => [newMovement, ...prev]);
-
-    // Reset fields
-    setDrugName('');
-    setQty('');
-    setExpiry('');
-    setIsAddModalOpen(false);
+    const { data, error: apiErr } = await apiMutate(() =>
+      inventoryApi.create({
+        clinicId: authClinic.id,
+        customName: drugName,
+        dosageForm: formType,
+        quantity: currentQty,
+        reorderThreshold: reorderPoint,
+        unitPrice: buy,
+        sellingPrice: sellingPrice ? parseFloat(sellingPrice) : undefined,
+        expiryDate: new Date(expiry).toISOString(),
+        ingredients: ingredients || undefined,
+        clinicalCategory,
+        trackingType,
+        regulatoryClass,
+        costType,
+        stockingLevel,
+        serialNo: serialNo || undefined,
+        consignmentOwner: consignmentOwner || undefined,
+      }),
+    );
+    if (apiErr) {
+      setError(apiErr);
+      return;
+    }
+    if (data) {
+      setRefetchKey(k => k + 1);
+      setDrugName('');
+      setIngredients('');
+      setQty('');
+      setExpiry('');
+      setBuyPrice('');
+      setSellingPrice('');
+      setSerialNo('');
+      setConsignmentOwner('');
+      setClinicalCategory('PHARMA');
+      setTrackingType('BULK');
+      setRegulatoryClass('STANDARD');
+      setCostType('OVERHEAD');
+      setStockingLevel('CENTRAL');
+      setIsAddModalOpen(false);
+    }
   };
 
   // Filter levels table based on search
   const filteredInventory = inventory.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.form.toLowerCase().includes(searchQuery.toLowerCase())
+    item.form.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.ingredients && item.ingredients.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Compute alert metrics
@@ -204,23 +274,20 @@ export default function InventoryPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setActiveTab('levels')}
-            className={`pb-2 px-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'levels'
+            className={`pb-2 px-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${activeTab === 'levels'
                 ? 'border-primary-600 text-primary-700'
                 : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
+              }`}
           >
             Current Stock Levels
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-2 px-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'history'
+            className={`pb-2 px-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${activeTab === 'history'
                 ? 'border-transparent text-text-secondary hover:text-text-primary'
                 : 'border-transparent text-text-secondary hover:text-text-primary'
-            } ${
-              activeTab === 'history' ? '!border-primary-600 !text-primary-700' : ''
-            }`}
+              } ${activeTab === 'history' ? '!border-primary-600 !text-primary-700' : ''
+              }`}
           >
             Stock Movement History
           </button>
@@ -240,6 +307,25 @@ export default function InventoryPage() {
         )}
       </div>
 
+      {/* Clinical category filter bar */}
+      {activeTab === 'levels' && (
+        <div className="flex flex-wrap gap-1.5">
+          {(['ALL', ...CLINICAL_CATEGORIES] as const).map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors cursor-pointer ${
+                categoryFilter === cat
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-surface-card text-text-secondary border-border hover:border-primary-400'
+              }`}
+            >
+              {cat === 'ALL' ? 'All' : cat}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Content Area */}
       {activeTab === 'levels' ? (
         /* Stock Levels Table View */
@@ -249,9 +335,13 @@ export default function InventoryPage() {
               <thead>
                 <tr className="bg-surface/50 border-b border-border">
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Item Name</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Category</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Form</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Current Qty</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Reorder Level</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Current Qty</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Reorder Level</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Buy</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Sell</th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-text-secondary uppercase tracking-wider">Margin</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Expiry Date</th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Status</th>
                   <th className="px-5 py-3.5 text-center text-xs font-semibold text-text-secondary">Alert</th>
@@ -262,23 +352,40 @@ export default function InventoryPage() {
                   filteredInventory.map((item) => {
                     const isLow = item.currentQty <= item.reorderPoint;
                     const isExpiring = item.status === 'EXPIRING SOON';
-                    
+
                     return (
                       <tr
                         key={item.id}
-                        className={`hover:bg-surface/50 transition-colors ${
-                          isLow ? 'bg-danger/[0.02]' : isExpiring ? 'bg-warning/[0.02]' : ''
-                        }`}
+                        className={`hover:bg-surface/50 transition-colors ${isLow ? 'bg-danger/[0.02]' : isExpiring ? 'bg-warning/[0.02]' : ''
+                          }`}
                       >
-                        <td className="px-5 py-3.5 font-semibold text-text-primary">{item.name}</td>
+                        <td className="px-5 py-3.5">
+                          <div className="font-semibold text-text-primary">{item.name}</div>
+                          {item.ingredients && (
+                            <div className="text-[11px] text-text-muted mt-0.5 italic">{item.ingredients}</div>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {item.clinicalCategory}
+                            {item.regulatoryClass === 'CONTROLLED' && (
+                              <span className="text-danger" title="Controlled substance">●</span>
+                            )}
+                          </span>
+                        </td>
                         <td className="px-5 py-3.5 text-text-secondary">{item.form}</td>
-                        <td className="px-5 py-3.5 font-bold text-text-primary">{item.currentQty.toLocaleString()}</td>
-                        <td className="px-5 py-3.5 text-text-muted">{item.reorderPoint}</td>
+                        <td className="px-5 py-3.5 font-bold text-text-primary text-right">{item.currentQty.toLocaleString()}</td>
+                        <td className="px-5 py-3.5 text-text-muted text-right">{item.reorderPoint}</td>
+                        <td className="px-5 py-3.5 text-text-secondary text-right tabular-nums">{item.buyPrice != null ? Number(item.buyPrice).toFixed(2) : '—'}</td>
+                        <td className="px-5 py-3.5 text-text-secondary text-right tabular-nums">{item.sellPrice != null ? Number(item.sellPrice).toFixed(2) : '—'}</td>
+                        <td className={`px-5 py-3.5 text-right tabular-nums font-semibold ${item.margin != null && item.margin >= 0 ? 'text-success' : 'text-text-muted'}`}>
+                          {item.margin != null ? Number(item.margin).toFixed(2) : '—'}
+                        </td>
                         <td className="px-5 py-3.5 text-text-secondary whitespace-nowrap">{item.expiry}</td>
                         <td className="px-5 py-3.5">
                           <Badge variant={
                             item.status === 'Good' ? 'success' :
-                            item.status === 'LOW STOCK' ? 'danger' : 'warning'
+                              item.status === 'LOW STOCK' ? 'danger' : 'warning'
                           }>
                             {item.status}
                           </Badge>
@@ -301,7 +408,7 @@ export default function InventoryPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-text-secondary">
+                    <td colSpan={11} className="px-5 py-12 text-center text-text-secondary">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <Package className="w-8 h-8 text-text-muted" />
                         <p className="font-semibold text-sm">No stock items match your search</p>
@@ -335,17 +442,15 @@ export default function InventoryPage() {
                       <td className="px-5 py-3.5 text-text-secondary whitespace-nowrap">{move.date}</td>
                       <td className="px-5 py-3.5 font-semibold text-text-primary">{move.itemName}</td>
                       <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                          move.type === 'RESTOCK' ? 'bg-primary-50 text-primary-700' :
-                          move.type === 'DISPENSED' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'
-                        }`}>
+                        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${move.type === 'RESTOCK' ? 'bg-primary-50 text-primary-700' :
+                            move.type === 'DISPENSED' ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-700'
+                          }`}>
                           {move.type}
                         </span>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className={`flex items-center gap-1 font-bold text-xs ${
-                          isPositive ? 'text-success' : 'text-danger'
-                        }`}>
+                        <span className={`flex items-center gap-1 font-bold text-xs ${isPositive ? 'text-success' : 'text-danger'
+                          }`}>
                           {isPositive ? (
                             <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
                           ) : (
@@ -433,6 +538,18 @@ export default function InventoryPage() {
                 )}
               </div>
 
+              {/* Active Ingredients / Composition */}
+              <div>
+                <label className="text-xs font-semibold text-text-secondary block mb-1">Active Ingredients / Composition</label>
+                <input
+                  type="text"
+                  value={ingredients}
+                  onChange={(e) => setIngredients(e.target.value)}
+                  placeholder="e.g. Paracetamol 500mg, Caffeine 30mg"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                />
+              </div>
+
               {/* Form Type & Expiry */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -484,6 +601,121 @@ export default function InventoryPage() {
                     className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
                   />
                 </div>
+              </div>
+
+              {/* Pricing: buy (cost) & sell */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Buy Price (cost) *</label>
+                  <input
+                    type="number"
+                    value={buyPrice}
+                    onChange={(e) => setBuyPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Sell Price</label>
+                  <input
+                    type="number"
+                    value={sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value)}
+                    placeholder="0.00"
+                    min="0"
+                    step="0.01"
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  />
+                </div>
+              </div>
+
+              {/* Classification */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Clinical Category</label>
+                  <select
+                    value={clinicalCategory}
+                    onChange={(e) => setClinicalCategory(e.target.value as InventoryClinicalCategory)}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  >
+                    {CLINICAL_CATEGORIES.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Tracking Type</label>
+                  <select
+                    value={trackingType}
+                    onChange={(e) => setTrackingType(e.target.value as InventoryItem['trackingType'])}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  >
+                    <option value="BULK">Bulk / consumable</option>
+                    <option value="LOT_BATCH">Lot / batch (expiry)</option>
+                    <option value="SERIAL">Serial / unit-unique</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Regulatory Class</label>
+                  <select
+                    value={regulatoryClass}
+                    onChange={(e) => setRegulatoryClass(e.target.value as InventoryItem['regulatoryClass'])}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  >
+                    <option value="STANDARD">Standard</option>
+                    <option value="CONTROLLED">Controlled (dual sign-off)</option>
+                    <option value="COLD_CHAIN">Cold chain</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Cost Type</label>
+                  <select
+                    value={costType}
+                    onChange={(e) => setCostType(e.target.value as InventoryItem['costType'])}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  >
+                    <option value="OVERHEAD">Overhead</option>
+                    <option value="CHARGEABLE">Chargeable (billable)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary block mb-1">Stocking Level</label>
+                  <select
+                    value={stockingLevel}
+                    onChange={(e) => setStockingLevel(e.target.value as InventoryItem['stockingLevel'])}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                  >
+                    <option value="CENTRAL">Central store</option>
+                    <option value="DEPARTMENT">Department / unit</option>
+                    <option value="CONSIGNMENT">Consignment</option>
+                  </select>
+                </div>
+                {trackingType === 'SERIAL' && (
+                  <div>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1">Serial No</label>
+                    <input
+                      type="text"
+                      value={serialNo}
+                      onChange={(e) => setSerialNo(e.target.value)}
+                      placeholder="e.g. IMPL-0001"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                    />
+                  </div>
+                )}
+                {stockingLevel === 'CONSIGNMENT' && (
+                  <div>
+                    <label className="text-xs font-semibold text-text-secondary block mb-1">Consignment Owner</label>
+                    <input
+                      type="text"
+                      value={consignmentOwner}
+                      onChange={(e) => setConsignmentOwner(e.target.value)}
+                      placeholder="Vendor name"
+                      className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none transition-all border-slate-200"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex gap-3">

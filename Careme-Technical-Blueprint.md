@@ -1,4 +1,4 @@
-# ClinicOS — Technical Blueprint
+# Careme — Technical Blueprint
 
 **Scope note:** This blueprint is scaled for a solo/small-team build using AI coding agents (Claude Code, etc.), targeting an initial launch to real customers — not a 200-engineer enterprise rollout. Where an "enterprise standard" practice (e.g. microservices, multi-cloud, SOC2) would slow down or complicate an early-stage build without adding real value yet, this document says so explicitly and recommends the pragmatic alternative, with a note on when to revisit it.
 
@@ -20,7 +20,7 @@ Decisions already locked from product discovery are treated as fixed inputs, not
 **Primary objectives**
 - Replace the fragmented stack a clinic currently cobbles together (register book, WhatsApp group, Excel inventory, paper Rx) with one system.
 - Let a clinic chain (Master) onboard new branches (Sub-Masters) in minutes.
-- Make white-labeling trivial — patients should never see "ClinicOS," they should see their clinic's brand.
+- Make white-labeling trivial — patients should never see "Careme," they should see their clinic's brand.
 
 **User value**
 - Owners: one dashboard for revenue/inventory/staff visibility across all branches.
@@ -50,7 +50,7 @@ Each module below: purpose, workflow, inputs/outputs, permissions, key edge case
 - **Purpose:** model a chain (org) containing one or more clinics.
 - **Workflow:** Master signs up → creates Org → adds Clinic(s) → assigns a Sub-Master (existing or new user) to each clinic.
 - **Inputs:** org name, country, clinic name/address/timezone/currency, sub-master email/phone.
-- **Outputs:** clinic record with its own landing page slug (e.g. `clinicos.com/c/apollo-hebbal`).
+- **Outputs:** clinic record with its own landing page slug (e.g. `careme.com/c/apollo-hebbal`).
 - **Permissions:** only Master can create/delete clinics or reassign Sub-Masters.
 - **Edge cases:** Sub-Master removed while staff still active (staff should be reassignable, not orphaned); Master account itself needs a person as fallback owner (can't be a role with no login); clinic deleted but has historical patient data (soft-delete, retain data per §15).
 
@@ -153,7 +153,7 @@ Each module below: purpose, workflow, inputs/outputs, permissions, key edge case
 
 | Persona | Goals | Permissions | Typical Workflow |
 |---|---|---|---|
-| **Master (Org Owner)** | Oversee all clinics, add branches, see rolled-up revenue | Full org access, billing with ClinicOS, add/remove clinics & sub-masters | Logs in weekly to review cross-clinic reports, onboards new branch |
+| **Master (Org Owner)** | Oversee all clinics, add branches, see rolled-up revenue | Full org access, billing with Careme, add/remove clinics & sub-masters | Logs in weekly to review cross-clinic reports, onboards new branch |
 | **Sub-Master (Clinic Owner)** | Run their clinic day-to-day | Full access within their clinic only | Daily login, manages staff, reviews clinic reports |
 | **Doctor** | See patients, prescribe, manage own schedule | Patient records, Rx, own appointment calendar, drug DB | Sees patient → checks history → prescribes → moves to next |
 | **Nurse** | Support doctor, manage intake | Appointments, vitals/history entry, reminders | Registers walk-ins, records vitals before doctor sees patient |
@@ -161,8 +161,8 @@ Each module below: purpose, workflow, inputs/outputs, permissions, key edge case
 | **Receptionist** | Front-desk operations | Appointments, patient registration, dues entry | Books/manages appointments, registers new patients, logs payments |
 | **Patient** | Book appointment, see own basic info | Public landing page: book, view own appointment status | Visits clinic's branded page, books a slot |
 | **Guest (unregistered visitor)** | Learn about clinic, book first visit | View landing page, submit booking request | Lands on page via WhatsApp/Google, books |
-| **ClinicOS Support (internal)** | Help clinics troubleshoot | Read-only or scoped impersonation access, audit-logged | Investigates a reported bug with explicit, logged access |
-| **API Consumer (future)** | Integrate ClinicOS with other tools | Scoped API key access (v2+, not v1) | N/A for v1 — flagged for roadmap |
+| **Careme Support (internal)** | Help clinics troubleshoot | Read-only or scoped impersonation access, audit-logged | Investigates a reported bug with explicit, logged access |
+| **API Consumer (future)** | Integrate Careme with other tools | Scoped API key access (v2+, not v1) | N/A for v1 — flagged for roadmap |
 
 ---
 
@@ -555,7 +555,7 @@ Scoped honestly: you're not processing payments (PCI-DSS off the table) and not 
 
 Given you said you already have some customers and are going global from day one, **Twilio** is the safer default for consistent behavior across countries; if your near-term customer base is India-concentrated, **Interakt or AiSensy** will be materially cheaper. This is a decision to make based on where your actual first customers are, not a technical constraint — flagged in §30.
 
-- **Number provisioning:** each clinic gets its own WhatsApp Business number through your BSP account (white-labeled — patients see the clinic's name, not ClinicOS).
+- **Number provisioning:** each clinic gets its own WhatsApp Business number through your BSP account (white-labeled — patients see the clinic's name, not Careme).
 - **Template management:** WhatsApp requires pre-approved templates for messages sent outside a 24-hour active conversation window — build a small template library (appointment confirmation, reminder, follow-up) and get them approved per BSP's process ahead of launch, not as an afterthought.
 - **Retry strategy:** failed sends retried with backoff; after N failures, fall back to SMS if configured, otherwise surface to staff as "reminder failed — contact patient manually."
 - **Delivery tracking:** BSP webhook updates `reminders.status` (§8) — surfaced in the dashboard so staff can see if a reminder actually reached the patient.
@@ -583,8 +583,8 @@ Given you said you already have some customers and are going global from day one
 
 ## 22. Billing Architecture (Ledger, Not Payment Processing)
 
-To avoid any ambiguity given the section name in the original template: **ClinicOS does not process patient payments.** This section covers only:
-- **Clinic-to-ClinicOS billing:** your own subscription billing (Master pays for the platform) — use a standard subscription billing provider (e.g. Stripe, or a regional equivalent) rather than building this yourself; this is the one place actual payment processing exists, and it's your revenue, not patient funds.
+To avoid any ambiguity given the section name in the original template: **Careme does not process patient payments.** This section covers only:
+- **Clinic-to-Careme billing:** your own subscription billing (Master pays for the platform) — use a standard subscription billing provider (e.g. Stripe, or a regional equivalent) rather than building this yourself; this is the one place actual payment processing exists, and it's your revenue, not patient funds.
 - **Patient dues ledger (§2.4, §8):** informational only — records what's owed/paid offline, no money movement, no PCI-DSS scope.
 - **GST/tax on your own subscription invoices to clinics:** relevant to your business, not to patient billing.
 
@@ -647,7 +647,7 @@ To avoid any ambiguity given the section name in the original template: **Clinic
 - Multi-region deployment — once you have clinics concentrated in a second geographic region where latency to a single-region deployment becomes a real complaint, not preemptively.
 - Offline-first support for patchy-connectivity clinics — real engineering investment, justified once you have enough customers reporting this as an actual pain point.
 - Customer-facing AI features (§11) — drug interaction checking, forecasting, natural-language reports — once the core product is stable and you have usage data to know which would actually matter.
-- API for third-party integrations, once external demand exists (e.g. a clinic wanting to connect ClinicOS to their accounting software).
+- API for third-party integrations, once external demand exists (e.g. a clinic wanting to connect Careme to their accounting software).
 - Enterprise certifications (SOC2, ISO27001) — pursue when a specific enterprise/hospital-group deal requires it, not speculatively.
 
 ---
@@ -685,7 +685,7 @@ Everything below should be resolved or provided before full-speed development be
 
 ## Business Requirements
 - Final feature list for v1 launch (recommend: Patients, Appointments, Inventory, Prescriptions, Staff, basic Reports, White-label landing — defer Payroll depth and advanced Analytics if timeline is tight)
-- Branding assets for ClinicOS itself (your logo, colors — separate from each clinic's white-label branding)
+- Branding assets for Careme itself (your logo, colors — separate from each clinic's white-label branding)
 - Pricing model (§30.1)
 - Terms of Service / Privacy Policy — needed before any clinic's real patient data enters the system, not an afterthought
 - Initial target countries/regions (even a rough list, to prioritize which medicine databases and compliance baselines to seed first)
@@ -705,7 +705,7 @@ Everything below should be resolved or provided before full-speed development be
 - WhatsApp BSP account + API credentials (§19 — decide provider first)
 - SMS gateway credentials (fallback channel)
 - Transactional email provider (e.g. SendGrid/Resend/Postmark)
-- Your own subscription billing provider (e.g. Stripe) — for Master-to-ClinicOS billing only, not patient payments
+- Your own subscription billing provider (e.g. Stripe) — for Master-to-Careme billing only, not patient payments
 - Error monitoring (e.g. Sentry)
 - CAPTCHA provider for the public booking form
 

@@ -3,9 +3,20 @@ export interface ClockInInput {
   userId: string;
   date?: string;
   checkIn?: string;
-  status?: 'PRESENT' | 'LATE' | 'HALF_DAY' | 'LEAVE';
+  status?: 'PRESENT' | 'LATE' | 'HALF_DAY' | 'LEAVE' | 'ABSENT';
   notes?: string;
   recordedById: string;
+}
+
+export interface AttendanceSummary {
+  total: number;
+  present: number;
+  absent: number;
+  late: number;
+  halfDay: number;
+  leave: number;
+  attendanceRate: number;
+  byDay: { date: string; rate: number; present: number; total: number }[];
 }
 
 export interface ClockOutInput {
@@ -26,6 +37,7 @@ export interface AttendanceResponse {
   createdAt: Date;
   clinicName?: string;
   userName?: string;
+  department?: string | null;
 }
 
 export interface SearchAttendanceInput {
@@ -34,6 +46,7 @@ export interface SearchAttendanceInput {
   fromDate?: string;
   toDate?: string;
   status?: string;
+  department?: string;
   page?: number;
   limit?: number;
 }

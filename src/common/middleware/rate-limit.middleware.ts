@@ -18,7 +18,11 @@ export function rateLimit(
 ) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const redis = await getRedisClient();
+      const redis = getRedisClient();
+      // ponytail: when Redis is unreachable, commands queue forever
+      // (the client's reconnectStrategy retries with backoff and never
+      // rejects). Skip rate-limiting in that case so login doesn't hang.
+      if (!redis.isReady) return next();
       const key = `ratelimit:${prefix}:${keyFn(req)}`;
       const now = Date.now();
 

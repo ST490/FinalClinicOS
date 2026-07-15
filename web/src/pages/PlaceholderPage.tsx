@@ -12,7 +12,7 @@ export default function PlaceholderPage() {
       </div>
       <h1 className="text-xl font-bold text-text-primary capitalize mb-2">{pageName}</h1>
       <p className="text-sm text-text-secondary text-center max-w-md">
-        This page is part of the ClinicOS dashboard shell. Content and functionality will be implemented in the next phase.
+        This page is part of the Careme dashboard shell. Content and functionality will be implemented in the next phase.
       </p>
       <div className="mt-6 px-4 py-2 rounded-lg bg-primary-50 text-primary-700 text-xs font-medium">
         Shell Mode — No API Connected

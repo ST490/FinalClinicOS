@@ -4,7 +4,7 @@ import { twilioService } from './notifications/twilio.service.js';
 
 const args = process.argv.slice(2);
 const to = args[0] || '+918050895979';
-const message = args[1] || 'Hi! ClinicOS test message — your appointment is confirmed for tomorrow at 3:30 PM. Reply CONFIRM to acknowledge.';
+const message = args[1] || 'Hi! Careme test message — your appointment is confirmed for tomorrow at 3:30 PM. Reply CONFIRM to acknowledge.';
 
 console.log(`[Test] Sending WhatsApp to ${to}...`);
 console.log(`[Test] Message: "${message}"`);

@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { enqueueReminderSend } from '../jobs/queue.js';
+import { reminderProcessor } from '../notifications/reminder-processor.js';
 import { CreateReminderInput, ReminderResponse, SearchRemindersInput } from './types/reminder.types.js';
 
 export class ReminderService {
@@ -21,6 +23,18 @@ export class ReminderService {
       },
       include: { patient: { select: { name: true } } },
     });
+
+    // ponytail: schedule via BullMQ instead of inline send — survives restarts and retries with backoff
+    const queued = await enqueueReminderSend(reminder.id, reminder.scheduledAt);
+
+    // Fallback for when Redis (and thus BullMQ) is unavailable: best-effort
+    // inline send for due-now reminders so the loop still works with zero infra.
+    // Future-dated reminders stay PENDING; the worker/sweep flushes them later.
+    if (!queued && reminder.scheduledAt.getTime() <= Date.now()) {
+      void reminderProcessor.processOneReminder(reminder.id).catch((e) =>
+        console.error('[ReminderService] inline fallback send failed:', e)
+      );
+    }
 
     return this.formatReminder(reminder);
   }

@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CreditCard, Filter, Plus, Search, Landmark, Check, AlertCircle, TrendingUp, Receipt } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { useAuth } from '../context/AuthContext';
+import { billingApi } from '../lib/billing';
+import { patientApi } from '../lib/patients';
+import { useApiQuery, apiMutate } from '../lib/useApiQuery';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import ErrorBanner from '../components/ui/ErrorBanner';
 
 interface DueInvoice {
   id: string;
@@ -11,23 +17,42 @@ interface DueInvoice {
   status: 'PAID' | 'UNPAID';
 }
 
-const CLINICS = [
-  'Downtown Specialty Clinic',
-  'Westside Family Practice',
-  'Northside Urgent Care',
-  'East Valley Health',
-];
-
-const PATIENTS = ['Liam Brown', 'Sarah Chen', 'Maria Sanchez', 'John Doe', 'Emily Davis'];
-
 export default function DuesPage() {
-  const [duesList, setDuesList] = useState<DueInvoice[]>([
-    { id: 'due-1', patientName: 'Liam Brown', amount: 150, date: '2026-07-04', clinicName: 'Downtown Specialty Clinic', status: 'UNPAID' },
-    { id: 'due-2', patientName: 'Sarah Chen', amount: 45, date: '2026-07-03', clinicName: 'Downtown Specialty Clinic', status: 'PAID' },
-    { id: 'due-3', patientName: 'Maria Sanchez', amount: 200, date: '2026-06-28', clinicName: 'Westside Family Practice', status: 'UNPAID' },
-    { id: 'due-4', patientName: 'John Doe', amount: 75, date: '2026-07-01', clinicName: 'Northside Urgent Care', status: 'PAID' },
-    { id: 'due-5', patientName: 'Emily Davis', amount: 50, date: '2026-07-02', clinicName: 'East Valley Health', status: 'UNPAID' },
-  ]);
+  const { clinic: authClinic, clinics } = useAuth();
+  const [refetchKey, setRefetchKey] = useState(0);
+
+  // Fetch from API
+  const { data: apiData, loading, error: fetchError, refetch } = useApiQuery(
+    () => billingApi.list({ clinicId: authClinic?.id, limit: 200 }),
+    { skip: !authClinic?.id, deps: [refetchKey] },
+  );
+
+  // Map API data
+  const initialDues: DueInvoice[] = useMemo(() => {
+    if (!apiData?.data) return [];
+    return apiData.data.map((d) => {
+      const dateStr = d.createdAt
+        ? `${new Date(d.createdAt).toLocaleDateString()} ${new Date(d.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : '';
+      return {
+        id: d.id,
+        patientName: d.patientName || 'Unknown Patient',
+        amount: parseFloat(d.amountDue) || 0,
+        date: dateStr,
+        clinicName: authClinic?.name || 'Clinic',
+        status: (d.status === 'PAID' ? 'PAID' : 'UNPAID') as 'PAID' | 'UNPAID',
+      };
+    });
+  }, [apiData, authClinic]);
+
+  const [duesList, setDuesList] = useState<DueInvoice[]>([]);
+  React.useEffect(() => { setDuesList(initialDues); }, [initialDues]);
+
+  // Fetch real patients list
+  const { data: realPatients } = useApiQuery(
+    () => patientApi.list({ limit: 200 }),
+    { skip: !authClinic?.id }
+  );
 
   // Filters State
   const [clinicFilter, setClinicFilter] = useState('ALL');
@@ -37,18 +62,31 @@ export default function DuesPage() {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newPatient, setNewPatient] = useState(PATIENTS[0]);
-  const [newClinic, setNewClinic] = useState(CLINICS[0]);
+  const [newPatient, setNewPatient] = useState('');
+  const [newClinic, setNewClinic] = useState(clinics[0]?.name ?? '');
   const [newAmount, setNewAmount] = useState('');
+  const [newDate, setNewDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  const handleMarkAsPaid = (id: string) => {
-    setDuesList(prev =>
-      prev.map(due => (due.id === id ? { ...due, status: 'PAID' } : due))
+  // Synchronize newPatient state with first real patient when modal opens or patients load
+  React.useEffect(() => {
+    if (realPatients?.data && realPatients.data.length > 0) {
+      setNewPatient(realPatients.data[0].id);
+    }
+  }, [realPatients, isModalOpen]);
+
+  const handleMarkAsPaid = async (id: string) => {
+    // Real API
+    const { error: apiErr } = await apiMutate(() =>
+      billingApi.recordPayment(id, { amount: duesList.find(d => d.id === id)?.amount || 0, paymentMethod: 'CASH' }),
     );
+    if (!apiErr) {
+      setDuesList(prev => prev.map(due => (due.id === id ? { ...due, status: 'PAID' } : due)));
+    }
   };
 
-  const handleCreateInvoice = (e: React.FormEvent) => {
+  const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -58,18 +96,35 @@ export default function DuesPage() {
       return;
     }
 
-    const newInvoice: DueInvoice = {
-      id: `due-${Date.now()}`,
-      patientName: newPatient,
-      amount: parsedAmount,
-      date: new Date().toISOString().split('T')[0],
-      clinicName: newClinic,
-      status: 'UNPAID',
-    };
+    // Real API
+    if (!newPatient) {
+      setError('Please select a patient. Register a patient first if the list is empty.');
+      return;
+    }
 
-    setDuesList(prev => [newInvoice, ...prev]);
+    // Combine selected date (newDate is "YYYY-MM-DD") with current local time to get a timezone-safe ISO string
+    let billingDateTime = new Date().toISOString();
+    if (newDate) {
+      const [year, month, day] = newDate.split('-').map(Number);
+      const selected = new Date();
+      selected.setFullYear(year, month - 1, day);
+      billingDateTime = selected.toISOString();
+    }
+
+    setSaving(true);
+    const { error: apiErr } = await apiMutate(() =>
+      billingApi.create({
+        clinicId: authClinic?.id || '',
+        patientId: newPatient,
+        totalAmount: parsedAmount,
+        createdAt: billingDateTime,
+      }),
+    );
+    setSaving(false);
+    if (apiErr) { setError(apiErr); return; }
     setNewAmount('');
     setIsModalOpen(false);
+    setRefetchKey(k => k + 1);
   };
 
   // Filter application logic
@@ -77,14 +132,14 @@ export default function DuesPage() {
     const matchesSearch = item.patientName.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClinic = clinicFilter === 'ALL' || item.clinicName === clinicFilter;
     const matchesStatus = statusFilter === 'ALL' || item.status === statusFilter;
-    
+
     let matchesDate = true;
     if (dateFilter !== 'ALL') {
-      const today = new Date('2026-07-05');
+      const today = new Date();
       const itemDate = new Date(item.date);
       const diffTime = Math.abs(today.getTime() - itemDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
+
       if (dateFilter === '7DAYS') {
         matchesDate = diffDays <= 7;
       } else if (dateFilter === '30DAYS') {
@@ -178,8 +233,8 @@ export default function DuesPage() {
               className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
             >
               <option value="ALL">All Clinics (All locations)</option>
-              {CLINICS.map(c => (
-                <option key={c} value={c}>{c}</option>
+              {clinics.map(c => (
+                <option key={c.id} value={c.name}>{c.name}</option>
               ))}
             </select>
           </div>
@@ -231,70 +286,76 @@ export default function DuesPage() {
 
       {/* Ledger Table */}
       <div className="bg-surface-card rounded-xl border border-border overflow-hidden shadow-sm" style={{ boxShadow: 'var(--shadow-card)' }}>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-surface/50 border-b border-border">
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Patient Name</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Issue Date</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Clinic Branch</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Invoice Amount</th>
-                <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Status</th>
-                <th className="px-5 py-3.5 text-center text-xs font-semibold text-text-secondary">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border-light">
-              {filteredDues.length > 0 ? (
-                filteredDues.map((due) => (
-                  <tr
-                    key={due.id}
-                    className={`hover:bg-surface/50 transition-colors ${
-                      due.status === 'UNPAID' ? 'bg-danger/[0.01]' : 'bg-success/[0.01]'
-                    }`}
-                  >
-                    <td className="px-5 py-4 font-semibold text-text-primary">{due.patientName}</td>
-                    <td className="px-5 py-4 text-text-secondary whitespace-nowrap">{due.date}</td>
-                    <td className="px-5 py-4 text-text-secondary">{due.clinicName}</td>
-                    <td className="px-5 py-4 font-bold text-text-primary">${due.amount.toLocaleString()}</td>
-                    <td className="px-5 py-4">
-                      <Badge variant={due.status === 'PAID' ? 'success' : 'warning'}>
-                        {due.status.toLowerCase()}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {due.status === 'UNPAID' ? (
-                          <button
-                            onClick={() => handleMarkAsPaid(due.id)}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-white bg-success hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer"
-                          >
-                            <Check className="w-3 h-3" /> Mark Paid
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => alert(`Billing verification: Invoice receipt requested for patient ${due.patientName}.`)}
-                            className="flex items-center gap-1 text-[11px] font-semibold text-text-primary bg-surface hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-border transition-colors cursor-pointer"
-                          >
-                            <Receipt className="w-3 h-3" /> Invoice Receipt
-                          </button>
-                        )}
+        {fetchError && <ErrorBanner message={fetchError} onRetry={refetch} />}
+        {loading ? (
+          <div className="p-6">
+            <TableSkeleton cols={6} rows={5} />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-surface/50 border-b border-border">
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Patient Name</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Issue Date</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Clinic Branch</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Invoice Amount</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">Status</th>
+                  <th className="px-5 py-3.5 text-center text-xs font-semibold text-text-secondary">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-light">
+                {filteredDues.length > 0 ? (
+                  filteredDues.map((due) => (
+                    <tr
+                      key={due.id}
+                      className={`hover:bg-surface/50 transition-colors ${due.status === 'UNPAID' ? 'bg-danger/[0.01]' : 'bg-success/[0.01]'
+                        }`}
+                    >
+                      <td className="px-5 py-4 font-semibold text-text-primary">{due.patientName}</td>
+                      <td className="px-5 py-4 text-text-secondary whitespace-nowrap">{due.date}</td>
+                      <td className="px-5 py-4 text-text-secondary">{due.clinicName}</td>
+                      <td className="px-5 py-4 font-bold text-text-primary">${due.amount.toLocaleString()}</td>
+                      <td className="px-5 py-4">
+                        <Badge variant={due.status === 'PAID' ? 'success' : 'warning'}>
+                          {due.status.toLowerCase()}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          {due.status === 'UNPAID' ? (
+                            <button
+                              onClick={() => handleMarkAsPaid(due.id)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-white bg-success hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" /> Mark Paid
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => alert(`Billing verification: Invoice receipt requested for patient ${due.patientName}.`)}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-text-primary bg-surface hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-border transition-colors cursor-pointer"
+                            >
+                              <Receipt className="w-3 h-3" /> Invoice Receipt
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-text-secondary">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <Landmark className="w-8 h-8 text-text-muted" />
+                        <p className="font-semibold text-sm">No ledger entries match your filter criteria</p>
                       </div>
                     </td>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-text-secondary">
-                    <div className="flex flex-col items-center justify-center space-y-2">
-                      <Landmark className="w-8 h-8 text-text-muted" />
-                      <p className="font-semibold text-sm">No ledger entries match your filter criteria</p>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Record Invoice Modal */}
@@ -329,9 +390,13 @@ export default function DuesPage() {
                   onChange={(e) => setNewPatient(e.target.value)}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
                 >
-                  {PATIENTS.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
+                  {(realPatients?.data || []).length === 0 ? (
+                    <option value="">No patients registered - please add one first</option>
+                  ) : (
+                    (realPatients?.data || []).map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -342,8 +407,8 @@ export default function DuesPage() {
                   onChange={(e) => setNewClinic(e.target.value)}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
                 >
-                  {CLINICS.map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {clinics.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
                   ))}
                 </select>
               </div>
@@ -360,6 +425,17 @@ export default function DuesPage() {
                 />
               </div>
 
+              <div>
+                <label className="text-xs font-semibold text-text-secondary block mb-1">Billing Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200 cursor-pointer"
+                />
+              </div>
+
               <div className="pt-2 flex gap-3">
                 <button
                   type="button"
@@ -370,9 +446,10 @@ export default function DuesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors cursor-pointer shadow-sm"
+                  disabled={saving}
+                  className="flex-1 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 py-2.5 rounded-lg transition-colors cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Record Invoice
+                  {saving ? 'Recording...' : 'Record Invoice'}
                 </button>
               </div>
             </form>

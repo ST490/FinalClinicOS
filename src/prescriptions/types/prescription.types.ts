@@ -1,3 +1,18 @@
+export type PrescriptionStatus =
+  | 'ACTIVE'
+  | 'DISPENSED'
+  | 'PAID'
+  | 'NOT_ARRIVED'
+  | 'CANCELLED';
+
+export const PRESCRIPTION_STATUSES: PrescriptionStatus[] = [
+  'ACTIVE',
+  'DISPENSED',
+  'PAID',
+  'NOT_ARRIVED',
+  'CANCELLED',
+];
+
 export interface CreatePrescriptionInput {
   clinicId: string;
   patientId: string;
@@ -30,7 +45,7 @@ export interface PrescriptionResponse {
   visitId: string | null;
   notes: string | null;
   signature: string | null;
-  status: string;
+  status: PrescriptionStatus;
   cancelledAt: Date | null;
   cancelledById: string | null;
   createdAt: Date;
@@ -38,6 +53,12 @@ export interface PrescriptionResponse {
   patient?: { id: string; name: string; phone: string | null };
   doctor?: { id: string; name: string };
   items?: PrescriptionItemResponse[];
+}
+
+export interface UpdatePrescriptionStatusInput {
+  id: string;
+  status: PrescriptionStatus;
+  actorId: string;
 }
 
 export interface PrescriptionItemResponse {
@@ -63,7 +84,7 @@ export interface SearchPrescriptionsInput {
   patientId?: string;
   doctorId?: string;
   visitId?: string;
-  status?: string;
+  status?: PrescriptionStatus;
   page?: number;
   limit?: number;
 }

@@ -1,4 +1,4 @@
-import { AppointmentType, Prisma } from '@prisma/client';
+import { AppointmentType, AppointmentCategory, Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import {
   CreateAppointmentInput,
@@ -40,6 +40,13 @@ export class AppointmentService {
       throw new AppError('DOUBLE_BOOKING', 'This time slot is already booked for this doctor', 409);
     }
 
+    // Category drives the isNewPatient flag: FIRST_TIME implies a new patient.
+    const category = input.category || AppointmentCategory.RETURNING;
+    const isNewPatient =
+      input.isNewPatient !== undefined
+        ? input.isNewPatient
+        : category === AppointmentCategory.FIRST_TIME;
+
     const appointment = await prisma.appointment.create({
       data: {
         clinicId: input.clinicId,
@@ -50,7 +57,8 @@ export class AppointmentService {
         slotEnd,
         type: input.type || AppointmentType.SCHEDULED,
         notes: input.notes,
-        isNewPatient: input.isNewPatient || false,
+        isNewPatient,
+        category,
         createdById: input.createdById,
       },
       include: {
@@ -99,6 +107,10 @@ export class AppointmentService {
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.queuePosition !== undefined && { queuePosition: input.queuePosition }),
         ...(input.type && { type: input.type }),
+        ...(input.category && {
+          category: input.category,
+          isNewPatient: input.category === AppointmentCategory.FIRST_TIME,
+        }),
       },
       include: {
         clinic: { select: { id: true, name: true } },
@@ -153,6 +165,7 @@ export class AppointmentService {
       ...(input.patientId && { patientId: input.patientId }),
       ...(input.status && (Array.isArray(input.status) ? { status: { in: input.status } } : { status: input.status })),
       ...(input.type && { type: input.type }),
+      ...(input.category && { category: input.category }),
       ...(input.fromDate && { slotStart: { gte: new Date(input.fromDate) } }),
       ...(input.toDate && { slotStart: { lte: new Date(input.toDate) } }),
     };
@@ -253,6 +266,7 @@ export class AppointmentService {
       slotEnd: appointment.slotEnd,
       type: appointment.type,
       status: appointment.status,
+      category: appointment.category,
       visitId: appointment.visitId,
       notes: appointment.notes,
       isNewPatient: appointment.isNewPatient,

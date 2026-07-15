@@ -1,6 +1,7 @@
 import { useLocation, Link } from 'react-router-dom';
 import { useRole } from '../../context/RoleContext';
-import { navigationByRole, usersByRole } from '../../mockData';
+import { useAuth } from '../../context/AuthContext';
+import { navigationByRole } from '../../lib/constants';
 import {
   LayoutDashboard, BarChart3, Building2, CreditCard, Users, Package,
   FileBarChart, Settings, UserRound, CalendarDays, Receipt, Palette,
@@ -28,9 +29,11 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { role, logout } = useRole();
+  const { user: authUser, organization } = useAuth();
   const location = useLocation();
   const navItems = navigationByRole[role];
-  const user = usersByRole[role];
+  const userName = authUser?.name ?? 'User';
+  const userRoleLabel = authUser?.roleLabel ?? role;
 
   return (
     <>
@@ -54,13 +57,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         style={{ boxShadow: 'var(--shadow-sidebar)' }}
       >
         {/* Logo / Brand */}
-        <div className="flex items-center justify-between px-5 py-5 border-b border-border-light">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+        <div className="h-16 px-5 border-b border-border-light flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2.5 group overflow-hidden">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow shrink-0">
               <Stethoscope className="w-4.5 h-4.5 text-white" />
             </div>
-            <span className="text-lg font-bold text-text-primary tracking-tight">
-              Clinic<span className="text-primary-600">OS</span>
+            <span className="text-sm font-bold text-text-primary tracking-tight truncate max-w-[160px]">
+              {organization?.name || 'Careme'}
             </span>
           </Link>
           <button
@@ -110,11 +113,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="px-4 py-4 border-t border-border-light flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-semibold shadow-sm">
-              {user.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+              {userName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-text-primary truncate">{user.name}</p>
-              <p className="text-xs text-text-muted truncate">{user.roleLabel}</p>
+              <p className="text-sm font-medium text-text-primary truncate">{userName}</p>
+              <p className="text-xs text-text-muted truncate">{userRoleLabel}</p>
             </div>
           </div>
           <button

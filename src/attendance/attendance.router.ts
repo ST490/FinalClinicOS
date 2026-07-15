@@ -11,7 +11,7 @@ const clockInSchema = z.object({
   userId: z.string().uuid(),
   date: z.string().optional(),
   checkIn: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'LEAVE']).optional(),
+  status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'LEAVE', 'ABSENT']).optional(),
   notes: z.string().optional(),
 });
 
@@ -25,8 +25,9 @@ const searchSchema = z.object({
   fromDate: z.string().optional(),
   toDate: z.string().optional(),
   status: z.enum(['PRESENT', 'LATE', 'HALF_DAY', 'LEAVE', 'ABSENT']).optional(),
+  department: z.string().optional(),
   page: z.coerce.number().min(1).optional().default(1),
-  limit: z.coerce.number().min(1).max(100).optional().default(20),
+  limit: z.coerce.number().min(1).max(1000).optional().default(20),
 });
 
 function checkPerm(permission: Permission) {
@@ -65,6 +66,19 @@ router.get('/attendance/today/:clinicId', authenticate, loadUserRoles, checkPerm
   try {
     const records = await attendanceService.getTodayAttendance(req.params.clinicId as string);
     res.json(records);
+  } catch (e) { next(e); }
+});
+
+router.get('/attendance/summary/:clinicId', authenticate, loadUserRoles, checkPerm('attendance:read'), async (req, res, next) => {
+  try {
+    const { fromDate, toDate } = z.object({
+      fromDate: z.string().optional(),
+      toDate: z.string().optional(),
+    }).parse(req.query);
+    const from = fromDate ? new Date(fromDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const to = toDate ? new Date(toDate) : new Date();
+    const summary = await attendanceService.getSummary(req.params.clinicId as string, from, to);
+    res.json(summary);
   } catch (e) { next(e); }
 });
 

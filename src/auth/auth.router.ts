@@ -11,19 +11,19 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 const registerSchema = z.object({
-  email: z.string().email().optional(),
-  phone: z.string().min(10).optional(),
+  email: z.string().trim().email().optional().or(z.literal('')),
+  phone: z.string().trim().min(10).optional().or(z.literal('')),
   password: z.string().min(8),
-  name: z.string().min(2),
-  orgName: z.string().min(2),
-  country: z.string().length(2),
+  name: z.string().trim().min(2),
+  orgName: z.string().trim().min(2),
+  country: z.string().trim().length(2),
 }).refine(data => data.email || data.phone, {
   message: 'Either email or phone is required',
 });
 
 const loginSchema = z.object({
-  email: z.string().email().optional(),
-  phone: z.string().optional(),
+  email: z.string().trim().email().optional().or(z.literal('')),
+  phone: z.string().trim().optional().or(z.literal('')),
   password: z.string(),
 }).refine(data => data.email || data.phone, {
   message: 'Either email or phone is required',
@@ -175,10 +175,7 @@ router.post(
 // POST /auth/accept-invite — Accept invitation, set password
 router.post('/accept-invite', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { token, password, name } = {
-      ...acceptInviteSchema.parse(req.body),
-      token: req.query.token as string,
-    };
+    const { token, password, name } = acceptInviteSchema.parse(req.body);
     const result = await authService.acceptInvite({
       token,
       password,

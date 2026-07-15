@@ -5,6 +5,7 @@ import {
   UpdateInventoryItemInput,
   StockAdjustmentInput,
   InventorySearchInput,
+  InventoryViewer,
   InventoryItemResponse,
   StockMovementResponse,
   LowStockAlert,
@@ -20,42 +21,60 @@ export class InventoryService {
     const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    const item = await prisma.inventoryItem.create({
-      data: {
-        clinicId: input.clinicId,
-        orgId: clinic.orgId,
-        medicineId: input.medicineId,
-        customName: input.customName,
-        customBrand: input.customBrand,
-        batchNo: input.batchNo,
-        expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-        quantity: input.quantity,
-        reorderThreshold: input.reorderThreshold || 10,
-        unitPrice: input.unitPrice,
-        mrp: input.mrp,
-        dosageForm: input.dosageForm,
-        strength: input.strength,
-        createdById: input.createdById,
-      },
-      include: {
-        medicine: { select: { id: true, genericName: true, brandNames: true } },
-      },
-    });
+    // Lot/batch-tracked items are expiry-sensitive — they MUST carry a batch + expiry.
+    if (input.trackingType === 'LOT_BATCH' && (!input.batchNo || !input.expiryDate)) {
+      throw new Error('Lot/batch-tracked items require batchNo and expiryDate');
+    }
 
-    // Create initial stock movement (RESTOCK)
-    await prisma.stockMovement.create({
-      data: {
-        clinicId: input.clinicId,
-        orgId: clinic.orgId,
-        inventoryItemId: item.id,
-        type: StockMovementType.RESTOCK,
-        quantityDelta: input.quantity,
-        performedById: input.createdById,
-        notes: 'Initial stock',
-      },
-    });
+    return await prisma.$transaction(async (tx) => {
+      const item = await tx.inventoryItem.create({
+        data: {
+          clinicId: input.clinicId,
+          orgId: clinic.orgId,
+          medicineId: input.medicineId,
+          customName: input.customName,
+          customBrand: input.customBrand,
+          batchNo: input.batchNo,
+          expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+          quantity: input.quantity,
+          reorderThreshold: input.reorderThreshold || 10,
+          unitPrice: input.unitPrice,
+          mrp: input.mrp,
+          sellingPrice: input.sellingPrice,
+          ingredients: input.ingredients,
+          dosageForm: input.dosageForm,
+          strength: input.strength,
+          trackingType: input.trackingType ?? 'BULK',
+          regulatoryClass: input.regulatoryClass ?? 'STANDARD',
+          costType: input.costType ?? 'OVERHEAD',
+          stockingLevel: input.stockingLevel ?? 'CENTRAL',
+          clinicalCategory: input.clinicalCategory ?? 'PHARMA',
+          serialNo: input.serialNo,
+          consignmentOwner: input.consignmentOwner,
+          createdById: input.createdById,
+        },
+        include: {
+          medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
+        },
+      });
 
-    return this.formatItem(item);
+      // Create initial stock movement (RESTOCK)
+      await tx.stockMovement.create({
+        data: {
+          clinicId: input.clinicId,
+          orgId: clinic.orgId,
+          inventoryItemId: item.id,
+          type: StockMovementType.RESTOCK,
+          quantityDelta: input.quantity,
+          performedById: input.createdById,
+          newBatchNo: input.batchNo,
+          newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+          notes: 'Initial stock',
+        },
+      });
+
+      return this.formatItem(item);
+    });
   }
 
   async update(id: string, input: UpdateInventoryItemInput): Promise<InventoryItemResponse> {
@@ -63,7 +82,7 @@ export class InventoryService {
       where: { id },
       data: input,
       include: {
-        medicine: { select: { id: true, genericName: true, brandNames: true } },
+        medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
       },
     });
     return this.formatItem(item);
@@ -73,31 +92,48 @@ export class InventoryService {
     const item = await prisma.inventoryItem.findUnique({
       where: { id },
       include: {
-        medicine: { select: { id: true, genericName: true, brandNames: true } },
+        medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
         stockMovements: { take: 10, orderBy: { createdAt: 'desc' } },
       },
     });
     return item ? this.formatItem(item) : null;
   }
 
-  async search(input: InventorySearchInput): Promise<{ data: InventoryItemResponse[]; pagination: any }> {
+  async search(input: InventorySearchInput & { viewer?: InventoryViewer }): Promise<{ data: InventoryItemResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
-
-    // Get current stock quantities
-    const stockMap = await this.getCurrentStockMap(input.clinicId);
 
     const where: Prisma.InventoryItemWhereInput = {
       deletedAt: null,
       ...(input.clinicId && { clinicId: input.clinicId }),
       ...(input.medicineId && { medicineId: input.medicineId }),
       ...(input.lowStock && {
-        id: { in: Object.entries(stockMap).filter(([, q]) => q <= 10).map(([id]) => id) },
+        quantity: { lte: 10 },
       }),
       ...(input.expiringBefore && {
         expiryDate: { lte: new Date(input.expiringBefore) },
       }),
+      ...(input.ingredients && {
+        OR: [
+          {
+            ingredients: { contains: input.ingredients, mode: 'insensitive' },
+          },
+          {
+            medicine: {
+              composition: { contains: input.ingredients, mode: 'insensitive' },
+            },
+          },
+        ],
+      }),
+      // Classification filters
+      ...(input.trackingType && { trackingType: input.trackingType }),
+      ...(input.regulatoryClass && { regulatoryClass: input.regulatoryClass }),
+      ...(input.costType && { costType: input.costType }),
+      ...(input.stockingLevel && { stockingLevel: input.stockingLevel }),
+      ...(input.clinicalCategory && { clinicalCategory: input.clinicalCategory }),
+      // Role scope: pharmacist sees pharmaceuticals only.
+      ...this.scopeWhere(input.viewer),
     };
 
     const [items, total] = await Promise.all([
@@ -107,14 +143,14 @@ export class InventoryService {
         take: limit,
         orderBy: { [input.sortBy || 'createdAt']: input.sortOrder || 'desc' },
         include: {
-          medicine: { select: { id: true, genericName: true, brandNames: true } },
+          medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
         },
       }),
       prisma.inventoryItem.count({ where }),
     ]);
 
     return {
-      data: items.map(i => this.formatItem({ ...i, quantity: stockMap[i.id] || 0 })),
+      data: items.map(i => this.formatItem(i)),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -140,10 +176,36 @@ export class InventoryService {
     quantityRequested: number,
     performedById: string,
     referenceType?: string,
-    referenceId?: string
+    referenceId?: string,
+    secondSignatoryId?: string
   ): Promise<{ success: boolean; shortage: number; batches: { batchNo: string | null; quantityTaken: number; expiryDate: Date | null }[] }> {
-    const stockMap = await this.getCurrentStockMapByItem(inventoryItemId);
+    return await prisma.$transaction(async (tx) => {
+      return this.deductStockTx(tx, inventoryItemId, quantityRequested, performedById, referenceType, referenceId, secondSignatoryId);
+    });
+  }
+
+  async deductStockTx(
+    tx: any,
+    inventoryItemId: string,
+    quantityRequested: number,
+    performedById: string,
+    referenceType?: string,
+    referenceId?: string,
+    secondSignatoryId?: string
+  ): Promise<{ success: boolean; shortage: number; batches: { batchNo: string | null; quantityTaken: number; expiryDate: Date | null }[] }> {
+    const stockMap = await this.getCurrentStockMapByItemTx(tx, inventoryItemId);
     const totalAvailable = Object.values(stockMap).reduce((sum, q) => sum + q, 0);
+
+    const clinicInfo = await tx.inventoryItem.findUnique({
+      where: { id: inventoryItemId },
+      select: { clinicId: true, orgId: true, regulatoryClass: true },
+    });
+    if (!clinicInfo) throw new Error('Inventory item not found');
+
+    // Controlled substances require a second signatory (dual sign-off).
+    if (clinicInfo.regulatoryClass === 'CONTROLLED' && !secondSignatoryId) {
+      throw new Error('CONTROLLED items require a second signatory (dual sign-off)');
+    }
 
     if (totalAvailable < quantityRequested) {
       // Partial fulfillment allowed — deduct what we have
@@ -160,23 +222,33 @@ export class InventoryService {
         remaining -= taken;
 
         const expDate = expiryDateStr !== 'null' && expiryDateStr ? new Date(expiryDateStr) : null;
-        batches.push({ batchNo, quantityTaken: taken, expiryDate: expDate });
+        const bNo = batchNo !== 'null' && batchNo ? batchNo : null;
+        batches.push({ batchNo: bNo, quantityTaken: taken, expiryDate: expDate });
 
         // Record deduction (one movement per batch)
-        await prisma.stockMovement.create({
+        await tx.stockMovement.create({
           data: {
             inventoryItemId,
-            clinicId: (await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } }))!.clinicId,
-            orgId: (await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } }))!.orgId,
+            clinicId: clinicInfo.clinicId,
+            orgId: clinicInfo.orgId,
             type: StockMovementType.SALE,
             quantityDelta: -taken,
             referenceType,
             referenceId,
             performedById,
-            notes: batchNo ? `FEFO: Batch ${batchNo}` : 'FEFO deduction',
+            secondSignatoryId: secondSignatoryId ?? null,
+            newBatchNo: bNo,
+            newExpiryDate: expDate,
+            notes: bNo ? `FEFO: Batch ${bNo}` : 'FEFO deduction',
           },
         });
       }
+
+      // Update InventoryItem quantity
+      await tx.inventoryItem.update({
+        where: { id: inventoryItemId },
+        data: { quantity: { decrement: totalAvailable } },
+      });
 
       return { success: false, shortage, batches };
     }
@@ -192,24 +264,33 @@ export class InventoryService {
       const taken = Math.min(remaining, qty);
       remaining -= taken;
 
-      batches.push({ batchNo, quantityTaken: taken, expiryDate: expiryDateStr && expiryDateStr !== 'null' ? new Date(expiryDateStr) : null });
+      const expDate = expiryDateStr && expiryDateStr !== 'null' ? new Date(expiryDateStr) : null;
+      const bNo = batchNo !== 'null' && batchNo ? batchNo : null;
+      batches.push({ batchNo: bNo, quantityTaken: taken, expiryDate: expDate });
 
-      await prisma.stockMovement.create({
+      await tx.stockMovement.create({
         data: {
           inventoryItemId,
-          clinicId: (await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } }))!.clinicId,
-          orgId: (await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } }))!.orgId,
+          clinicId: clinicInfo.clinicId,
+          orgId: clinicInfo.orgId,
           type: StockMovementType.SALE,
           quantityDelta: -taken,
           referenceType,
           referenceId,
-          newBatchNo: batchNo !== 'null' ? batchNo : null,
-          newExpiryDate: expiryDateStr && expiryDateStr !== 'null' ? new Date(expiryDateStr) : null,
+          secondSignatoryId: secondSignatoryId ?? null,
+          newBatchNo: bNo,
+          newExpiryDate: expDate,
           performedById,
-          notes: batchNo ? `FEFO: Batch ${batchNo}` : 'FEFO deduction',
+          notes: bNo ? `FEFO: Batch ${bNo}` : 'FEFO deduction',
         },
       });
     }
+
+    // Update InventoryItem quantity
+    await tx.inventoryItem.update({
+      where: { id: inventoryItemId },
+      data: { quantity: { decrement: quantityRequested } },
+    });
 
     return { success: true, shortage: 0, batches };
   }
@@ -218,29 +299,43 @@ export class InventoryService {
    * Adjust stock (RESTOCK, WRITE_OFF, ADJUSTMENT, RETURN)
    */
   async adjustStock(inventoryItemId: string, input: StockAdjustmentInput): Promise<StockMovementResponse> {
-    const item = await prisma.inventoryItem.findUnique({ where: { id: inventoryItemId } });
-    if (!item) throw new Error('Inventory item not found');
+    return await prisma.$transaction(async (tx) => {
+      const item = await tx.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+      if (!item) throw new Error('Inventory item not found');
 
-    const movement = await prisma.stockMovement.create({
-      data: {
-        clinicId: item.clinicId,
-        orgId: item.orgId,
-        inventoryItemId,
-        type: input.type,
-        quantityDelta: input.quantityDelta,
-        referenceType: input.referenceType,
-        referenceId: input.referenceId,
-        newBatchNo: input.batchNo,
-        newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-        notes: input.notes,
-        performedById: input.performedById,
-      },
-      include: {
-        performedBy: { select: { id: true, name: true } },
-      },
+      // Controlled substances require a second signatory (dual sign-off).
+      if (item.regulatoryClass === 'CONTROLLED' && !input.secondSignatoryId) {
+        throw new Error('CONTROLLED items require a second signatory (dual sign-off)');
+      }
+
+      const movement = await tx.stockMovement.create({
+        data: {
+          clinicId: item.clinicId,
+          orgId: item.orgId,
+          inventoryItemId,
+          type: input.type,
+          quantityDelta: input.quantityDelta,
+          referenceType: input.referenceType,
+          referenceId: input.referenceId,
+          newBatchNo: input.batchNo,
+          newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+          notes: input.notes,
+          performedById: input.performedById,
+          secondSignatoryId: input.secondSignatoryId ?? null,
+        },
+        include: {
+          performedBy: { select: { id: true, name: true } },
+        },
+      });
+
+      // Update InventoryItem quantity
+      await tx.inventoryItem.update({
+        where: { id: inventoryItemId },
+        data: { quantity: { increment: input.quantityDelta } },
+      });
+
+      return this.formatMovement(movement);
     });
-
-    return this.formatMovement(movement);
   }
 
   /**
@@ -273,15 +368,14 @@ export class InventoryService {
       where: { clinicId, deletedAt: null },
     });
 
-    const stockMap = await this.getCurrentStockMap(clinicId);
     const lowStockItems = items
-      .filter(item => stockMap[item.id] <= item.reorderThreshold)
+      .filter(item => item.quantity <= item.reorderThreshold)
       .map(item => ({
         id: item.id,
         displayName: this.getDisplayName(item),
-        quantity: stockMap[item.id] || 0,
+        quantity: item.quantity,
         reorderThreshold: item.reorderThreshold,
-        shortage: item.reorderThreshold - (stockMap[item.id] || 0),
+        shortage: item.reorderThreshold - item.quantity,
       }));
 
     return {
@@ -307,31 +401,16 @@ export class InventoryService {
       include: { medicine: { select: { id: true, genericName: true, brandNames: true } } },
     });
 
-    const stockMap = await this.getCurrentStockMap(clinicId);
-    return items.map(i => this.formatItem({ ...i, quantity: stockMap[i.id] || 0 }));
+    return items.map(i => this.formatItem(i));
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // HELPERS
   // ─────────────────────────────────────────────────────────────────────────────
 
-  private async getCurrentStockMap(clinicId?: string): Promise<Record<string, number>> {
-    const where: Prisma.StockMovementWhereInput = clinicId ? { clinicId } : {};
-    const movements = await prisma.stockMovement.findMany({
-      where,
-      select: { inventoryItemId: true, quantityDelta: true },
-    });
-
-    const map: Record<string, number> = {};
-    for (const m of movements) {
-      map[m.inventoryItemId] = (map[m.inventoryItemId] || 0) + m.quantityDelta;
-    }
-    return map;
-  }
-
-  private async getCurrentStockMapByItem(inventoryItemId: string): Promise<Record<string, number>> {
+  private async getCurrentStockMapByItemTx(tx: any, inventoryItemId: string): Promise<Record<string, number>> {
     // Group by batch/date for FEFO
-    const movements = await prisma.stockMovement.findMany({
+    const movements = await tx.stockMovement.findMany({
       where: { inventoryItemId },
       select: {
         quantityDelta: true,
@@ -361,12 +440,29 @@ export class InventoryService {
   }
 
   private formatItem(item: any): InventoryItemResponse {
+    const unitPrice = item.unitPrice != null ? Number(item.unitPrice) : null;
+    const sellingPrice = item.sellingPrice != null ? Number(item.sellingPrice) : null;
     return {
       ...item,
       displayName: this.getDisplayName(item),
       isLowStock: item.quantity <= item.reorderThreshold,
       isExpiringSoon: item.expiryDate ? new Date(item.expiryDate) <= new Date(Date.now() + FEFO_THRESHOLD_DAYS * 24 * 60 * 60 * 1000) : false,
+      // Buy price minus sell price → profit margin (null when sell price unknown).
+      margin: unitPrice != null && sellingPrice != null ? Number((sellingPrice - unitPrice).toFixed(2)) : null,
     };
+  }
+
+  /**
+   * Role-based scope. A PHARMACIST (who is not the org owner) may only see
+   * pharmaceutical inventory; everyone else sees everything. Returns a Prisma
+   * `where` fragment (empty when no restriction applies).
+   */
+  private scopeWhere(viewer?: InventoryViewer): Prisma.InventoryItemWhereInput {
+    if (!viewer || viewer.isOrgOwner) return {};
+    if (viewer.roles.includes('PHARMACIST')) {
+      return { clinicalCategory: 'PHARMA' };
+    }
+    return {};
   }
 
   private formatMovement(movement: any): StockMovementResponse {

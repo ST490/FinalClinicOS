@@ -204,8 +204,6 @@ export class PatientService {
     const [recentVisits, recentAppointments, dueAmount] = await Promise.all([
       prisma.patientVisit.count({
         where: { patientId: id },
-        orderBy: { visitDate: 'desc' },
-        take: 30,
       }),
       prisma.appointment.count({
         where: { patientId: id },

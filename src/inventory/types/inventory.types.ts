@@ -1,4 +1,11 @@
-import { StockMovementType } from '@prisma/client';
+import {
+  StockMovementType,
+  InventoryTrackingType,
+  InventoryRegulatoryClass,
+  InventoryCostType,
+  InventoryStockingLevel,
+  InventoryClinicalCategory,
+} from '@prisma/client';
 
 export interface CreateInventoryItemInput {
   clinicId: string;
@@ -11,8 +18,19 @@ export interface CreateInventoryItemInput {
   reorderThreshold?: number;
   unitPrice: number;
   mrp?: number;
+  sellingPrice?: number;
   dosageForm?: string;
   strength?: string;
+  ingredients?: string;
+  // Classification
+  trackingType?: InventoryTrackingType;
+  regulatoryClass?: InventoryRegulatoryClass;
+  costType?: InventoryCostType;
+  stockingLevel?: InventoryStockingLevel;
+  clinicalCategory?: InventoryClinicalCategory;
+  // Tracking-type specifics
+  serialNo?: string;
+  consignmentOwner?: string;
   createdById: string;
 }
 
@@ -22,8 +40,18 @@ export interface UpdateInventoryItemInput {
   reorderThreshold?: number;
   unitPrice?: number;
   mrp?: number;
+  sellingPrice?: number;
   dosageForm?: string;
   strength?: string;
+  ingredients?: string;
+  // Classification
+  trackingType?: InventoryTrackingType;
+  regulatoryClass?: InventoryRegulatoryClass;
+  costType?: InventoryCostType;
+  stockingLevel?: InventoryStockingLevel;
+  clinicalCategory?: InventoryClinicalCategory;
+  serialNo?: string;
+  consignmentOwner?: string;
 }
 
 export interface StockAdjustmentInput {
@@ -35,6 +63,8 @@ export interface StockAdjustmentInput {
   batchNo?: string;
   expiryDate?: string;
   performedById: string;
+  // Controlled-substance dual sign-off (required when the item is CONTROLLED)
+  secondSignatoryId?: string;
 }
 
 export interface InventorySearchInput {
@@ -42,10 +72,23 @@ export interface InventorySearchInput {
   medicineId?: string;
   lowStock?: boolean;
   expiringBefore?: string;
+  ingredients?: string;
+  // Classification filters
+  trackingType?: InventoryTrackingType;
+  regulatoryClass?: InventoryRegulatoryClass;
+  costType?: InventoryCostType;
+  stockingLevel?: InventoryStockingLevel;
+  clinicalCategory?: InventoryClinicalCategory;
   page?: number;
   limit?: number;
   sortBy?: 'quantity' | 'expiryDate' | 'createdAt';
   sortOrder?: 'asc' | 'desc';
+}
+
+/** Viewer context used to scope the result set (pharmacist → PHARMA only). */
+export interface InventoryViewer {
+  roles: string[];
+  isOrgOwner: boolean;
 }
 
 export interface InventoryItemResponse {
@@ -61,14 +104,25 @@ export interface InventoryItemResponse {
   reorderThreshold: number;
   unitPrice: any;
   mrp: any | null;
+  sellingPrice: any | null;
+  margin: number | null;
   dosageForm: string | null;
   strength: string | null;
+  ingredients: string | null;
+  // Classification
+  trackingType: InventoryTrackingType;
+  regulatoryClass: InventoryRegulatoryClass;
+  costType: InventoryCostType;
+  stockingLevel: InventoryStockingLevel;
+  clinicalCategory: InventoryClinicalCategory;
+  serialNo: string | null;
+  consignmentOwner: string | null;
   displayName: string;
   isLowStock: boolean;
   isExpiringSoon: boolean;
   createdAt: Date;
   // Relations
-  medicine?: { id: string; genericName: string; brandNames: string[] };
+  medicine?: { id: string; genericName: string; brandNames: string[]; composition?: string | null };
 }
 
 export interface StockMovementResponse {

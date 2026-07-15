@@ -29,6 +29,34 @@ export interface StaffReport {
   present: number;
   absent: number;
   late: number;
+  byDay: { date: string; rate: number; present: number; total: number }[];
+}
+
+export interface PayrollReport {
+  period: string | null;
+  totalNet: number;
+  totalBasic: number;
+  totalOvertime: number;
+  totalDeduction: number;
+  headcount: number;
+  byDepartment: { department: string | null; net: number; count: number }[];
+  byWageType: { wageType: string | null; net: number; count: number }[];
+}
+
+export interface LeaveReport {
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  resolutionRate: number;
+  byType: { type: string; count: number }[];
+}
+
+export interface LabourCostReport {
+  period: string | null;
+  totalCost: number;
+  byDepartment: { department: string | null; cost: number; headcount: number }[];
+  byEmploymentType: { employmentType: string; cost: number; headcount: number }[];
 }
 
 export const reportsApi = {
@@ -49,6 +77,21 @@ export const reportsApi = {
 
   staff: async (clinicId: string, params?: { fromDate?: string; toDate?: string }) => {
     const res = await api.get<StaffReport>(`/reports/staff/${clinicId}`, { params });
+    return res.data;
+  },
+
+  payroll: async (clinicId: string, params?: { period?: string }) => {
+    const res = await api.get<PayrollReport>(`/reports/payroll/${clinicId}`, { params });
+    return res.data;
+  },
+
+  leave: async (clinicId: string, params?: { fromDate?: string; toDate?: string }) => {
+    const res = await api.get<LeaveReport>(`/reports/leave/${clinicId}`, { params });
+    return res.data;
+  },
+
+  labourCost: async (clinicId: string, params?: { period?: string }) => {
+    const res = await api.get<LabourCostReport>(`/reports/labour-cost/${clinicId}`, { params });
     return res.data;
   },
 };

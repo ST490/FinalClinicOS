@@ -7,7 +7,7 @@ import { Plus, Trash2, Clipboard, AlertCircle, Loader2 } from 'lucide-react';
 const DRUG_DATABASE = ['Amoxicillin 500mg', 'Paracetamol 650mg', 'Omeprazole 20mg', 'Metformin 500mg', 'Azithromycin 250mg', 'Ibuprofen 400mg'];
 
 export default function PrescriptionsPage() {
-  const { clinic } = useAuth();
+  const { clinic, user } = useAuth();
   const [patientId, setPatientId] = useState('');
   const [notes, setNotes] = useState('');
   const [drugName, setDrugName] = useState('');
@@ -41,7 +41,7 @@ export default function PrescriptionsPage() {
     if (items.length === 0) { setError('Add at least one medication'); return; }
     setError(''); setLoading(true);
     try {
-      const rx = await api.create({ clinicId: clinic.id, patientId, notes, items });
+      const rx = await api.create({ clinicId: clinic.id, patientId, doctorId: user!.id, notes, items });
       alert(`Prescription created: ${rx.id}`);
       setItems([]); setPatientId(''); setNotes('');
     } catch { alert('Failed to create prescription'); }

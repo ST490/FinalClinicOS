@@ -1,4 +1,4 @@
-import { AppointmentType, AppointmentStatus } from '@prisma/client';
+import { AppointmentType, AppointmentStatus, AppointmentCategory } from '@prisma/client';
 
 export interface CreateAppointmentInput {
   clinicId: string;
@@ -9,6 +9,7 @@ export interface CreateAppointmentInput {
   type?: AppointmentType;
   notes?: string;
   isNewPatient?: boolean;
+  category?: AppointmentCategory;
   createdById: string;
 }
 
@@ -19,6 +20,7 @@ export interface UpdateAppointmentInput {
   notes?: string;
   queuePosition?: number;
   type?: AppointmentType;
+  category?: AppointmentCategory;
 }
 
 export interface AppointmentSearchInput {
@@ -29,6 +31,7 @@ export interface AppointmentSearchInput {
   fromDate?: string;
   toDate?: string;
   type?: AppointmentType;
+  category?: AppointmentCategory;
   page?: number;
   limit?: number;
   sortBy?: 'slotStart' | 'createdAt';
@@ -58,6 +61,7 @@ export interface AppointmentResponse {
   slotEnd: Date;
   type: AppointmentType;
   status: AppointmentStatus;
+  category: AppointmentCategory;
   visitId: string | null;
   notes: string | null;
   isNewPatient: boolean;

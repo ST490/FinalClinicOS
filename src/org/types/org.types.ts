@@ -86,6 +86,7 @@ export interface ClinicResponse {
 export interface SearchClinicsInput {
   orgId?: string;
   status?: string;
+  clinicIds?: string[];
   page?: number;
   limit?: number;
   sortBy?: string;

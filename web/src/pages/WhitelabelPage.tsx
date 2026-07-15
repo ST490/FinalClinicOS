@@ -1,87 +1,98 @@
-import { useState } from 'react';
-import { Palette, Eye, ArrowUpRight, Check, Sparkles, Sliders, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Palette, Eye, ArrowUpRight, Check, Sparkles, Sliders, Globe, Upload, Image as ImageIcon, Trash2, Plus, Megaphone, Phone, MapPin, Clock, UserRound } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { staffApi, type StaffMember } from '../lib/staff';
+import {
+  emptyConfig, getWhitelabel, saveWhitelabel, readImageAsDataUrl, DEMO_CONFIG,
+  type WhitelabelConfig, type WLTheme,
+} from '../lib/whitelabel';
 
-const CLINICS = [
-  {
-    name: 'Downtown Specialty Clinic',
-    theme: 'teal',
-    colorHex: '#0d9488',
-    headline: 'Modern Specialist Care, Tailored to You',
-    subheadline: 'Apex clinical specialists utilizing state-of-the-art diagnostic pathways and patient care systems.',
-  },
-  {
-    name: 'Westside Family Practice',
-    theme: 'indigo',
-    colorHex: '#4f46e5',
-    headline: 'Compassionate Care for the Whole Family',
-    subheadline: 'Providing comprehensive pediatric, family wellness, and preventive care models across NYC.',
-  },
-  {
-    name: 'Northside Urgent Care',
-    theme: 'rose',
-    colorHex: '#e11d48',
-    headline: 'Rapid Medical Attention When It Matters Most',
-    subheadline: 'Walk-ins welcome. Certified primary responders and triage physicians standing by 24/7.',
-  },
-  {
-    name: 'East Valley Health',
-    theme: 'emerald',
-    colorHex: '#059669',
-    headline: 'Natural Wellness & Integrative Primary Care',
-    subheadline: 'Synthesizing wellness therapies with clinical evidence to establish health spans.',
-  },
-];
+const THEMES: WLTheme[] = ['teal', 'indigo', 'rose', 'emerald'];
+
+const themeClasses: Record<WLTheme, { text: string; bg: string; bgLight: string; border: string; fill: string }> = {
+  teal: { text: 'text-teal-600', bg: 'bg-teal-600 hover:bg-teal-700 text-white', bgLight: 'bg-teal-50 text-teal-700 border-teal-100', border: 'border-teal-500/20', fill: 'bg-teal-600' },
+  indigo: { text: 'text-indigo-600', bg: 'bg-indigo-600 hover:bg-indigo-700 text-white', bgLight: 'bg-indigo-50 text-indigo-700 border-indigo-100', border: 'border-indigo-500/20', fill: 'bg-indigo-600' },
+  rose: { text: 'text-rose-600', bg: 'bg-rose-600 hover:bg-rose-700 text-white', bgLight: 'bg-rose-50 text-rose-700 border-rose-100', border: 'border-rose-500/20', fill: 'bg-rose-600' },
+  emerald: { text: 'text-emerald-600', bg: 'bg-emerald-600 hover:bg-emerald-700 text-white', bgLight: 'bg-emerald-50 text-emerald-700 border-emerald-100', border: 'border-emerald-500/20', fill: 'bg-emerald-600' },
+};
 
 export default function WhitelabelPage() {
-  const [selectedClinic, setSelectedClinic] = useState(CLINICS[0]);
-  const [customHeadline, setCustomHeadline] = useState(selectedClinic.headline);
-  const [customSubheadline, setCustomSubheadline] = useState(selectedClinic.subheadline);
-  const [activeTheme, setActiveTheme] = useState(selectedClinic.theme);
+  const { clinics } = useAuth();
+  const [selectedClinicId, setSelectedClinicId] = useState('');
+  const [config, setConfig] = useState<WhitelabelConfig | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const handleClinicChange = (name: string) => {
-    const found = CLINICS.find(c => c.name === name);
-    if (found) {
-      setSelectedClinic(found);
-      setCustomHeadline(found.headline);
-      setCustomSubheadline(found.subheadline);
-      setActiveTheme(found.theme);
-    }
+  useEffect(() => {
+    if (clinics.length && !selectedClinicId) setSelectedClinicId(clinics[0].id);
+  }, [clinics, selectedClinicId]);
+
+  useEffect(() => {
+    if (!selectedClinicId) return;
+    setConfig(getWhitelabel(selectedClinicId) || emptyConfig(selectedClinicId));
+    let active = true;
+    setStaffLoading(true);
+    staffApi.list({ clinicId: selectedClinicId })
+      .then(s => { if (active) setStaffList(s); })
+      .catch(() => {})
+      .finally(() => { if (active) setStaffLoading(false); });
+    return () => { active = false; };
+  }, [selectedClinicId]);
+
+  if (!config) {
+    return <div className="text-sm text-text-secondary p-8">Loading clinic branding…</div>;
+  }
+
+  const clinicName = clinics.find(c => c.id === selectedClinicId)?.name ?? 'Clinic';
+  const update = (patch: Partial<WhitelabelConfig>) => setConfig(c => (c ? { ...c, ...patch } : c));
+  const updateMotion = (patch: Partial<WhitelabelConfig['motionBanner']>) =>
+    setConfig(c => (c ? { ...c, motionBanner: { ...c.motionBanner, ...patch } } : c));
+  const updateContact = (patch: Partial<WhitelabelConfig['contact']>) =>
+    setConfig(c => (c ? { ...c, contact: { ...c.contact, ...patch } } : c));
+
+  const onImage = (field: 'logo' | 'banner' | 'building') => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = await readImageAsDataUrl(file);
+    update(field === 'logo' ? { logo: url } : field === 'banner' ? { banner: url } : { building: url });
+    e.target.value = '';
   };
 
-  // Get accent color class
-  const getAccentBg = (themeName: string) => {
-    switch (themeName) {
-      case 'indigo': return 'bg-indigo-600 hover:bg-indigo-700 text-white';
-      case 'rose': return 'bg-rose-600 hover:bg-rose-700 text-white';
-      case 'emerald': return 'bg-emerald-600 hover:bg-emerald-700 text-white';
-      default: return 'bg-teal-600 hover:bg-teal-700 text-white';
-    }
+  const doctorCandidates = (() => {
+    const docs = staffList.filter(s => s.clinicRoles.some(r => r.clinicId === selectedClinicId && r.role === 'DOCTOR'));
+    return docs.length ? docs : staffList;
+  })();
+
+  const toggleDoctor = (s: StaffMember) => {
+    const exists = config.doctors.some(d => d.id === s.id);
+    if (exists) update({ doctors: config.doctors.filter(d => d.id !== s.id) });
+    else update({ doctors: [...config.doctors, { id: s.id, name: s.name, specialty: '', photo: undefined }] });
+  };
+  const setDoctorPhoto = (id: string, url: string) =>
+    update({ doctors: config.doctors.map(d => (d.id === id ? { ...d, photo: url } : d)) });
+  const setDoctorSpecialty = (id: string, val: string) =>
+    update({ doctors: config.doctors.map(d => (d.id === id ? { ...d, specialty: val } : d)) });
+
+  const addService = () => update({ services: [...config.services, ''] });
+  const setService = (i: number, val: string) =>
+    update({ services: config.services.map((s, idx) => (idx === i ? val : s)) });
+  const removeService = (i: number) =>
+    update({ services: config.services.filter((_, idx) => idx !== i) });
+
+  const handleSave = () => {
+    saveWhitelabel(config);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   };
 
-  const getAccentText = (themeName: string) => {
-    switch (themeName) {
-      case 'indigo': return 'text-indigo-600';
-      case 'rose': return 'text-rose-600';
-      case 'emerald': return 'text-emerald-600';
-      default: return 'text-teal-600';
-    }
-  };
-
-  const getAccentBorder = (themeName: string) => {
-    switch (themeName) {
-      case 'indigo': return 'border-indigo-500/20';
-      case 'rose': return 'border-rose-500/20';
-      case 'emerald': return 'border-emerald-500/20';
-      default: return 'border-teal-500/20';
-    }
-  };
-
-  // Simulate launch public URL
-  const publicUrl = `/public-landing?clinic=${encodeURIComponent(selectedClinic.name)}&headline=${encodeURIComponent(customHeadline)}&subheadline=${encodeURIComponent(customSubheadline)}&theme=${activeTheme}`;
+  const preview = demoMode ? { ...emptyConfig(selectedClinicId), ...DEMO_CONFIG } : config;
+  const t = themeClasses[preview.theme];
+  const publicUrl = `/public-landing?clinic=${encodeURIComponent(selectedClinicId)}`;
 
   return (
     <div className="space-y-6 animate-fade-in font-sans pb-12">
-      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -90,197 +101,302 @@ export default function WhitelabelPage() {
             White-Label Patient Portals
           </h1>
           <p className="text-xs text-text-secondary mt-0.5">
-            Configure customized patient-facing landing templates, typography, and clinic color accents dynamically.
+            Customize the patient-facing landing page for this clinic branch.
           </p>
         </div>
-        
-        <a
-          href={publicUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-lg transition-all shadow-sm cursor-pointer ${getAccentBg(activeTheme)}`}
-        >
-          <Globe className="w-4 h-4" />
-          Preview Live Patient Site
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </a>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary cursor-pointer select-none">
+            <input type="checkbox" checked={demoMode} onChange={e => setDemoMode(e.target.checked)} className="accent-primary-600" />
+            Demo showcase
+          </label>
+          <button
+            onClick={handleSave}
+            className="flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer"
+          >
+            <Check className="w-4 h-4" /> {saved ? 'Saved!' : 'Save Branding'}
+          </button>
+          <a href={publicUrl} target="_blank" rel="noopener noreferrer"
+            className={`flex items-center justify-center gap-1.5 text-xs font-semibold px-4 py-2.5 rounded-lg transition-all shadow-sm cursor-pointer ${t.bg}`}>
+            <Globe className="w-4 h-4" /> Preview Live <ArrowUpRight className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
 
-      {/* Editor & Preview Grid */}
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-        
-        {/* Editor Settings: 2/5 width */}
-        <div className="xl:col-span-2 bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-5" style={{ boxShadow: 'var(--shadow-card)' }}>
+        {/* Editor */}
+        <div className="xl:col-span-2 bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-5 max-h-[900px] overflow-y-auto" style={{ boxShadow: 'var(--shadow-card)' }}>
           <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase tracking-wider pb-3 border-b border-border-light">
             <Sliders className="w-4 h-4 text-primary-600" /> Branding Configurator
           </div>
 
-          {/* Select Clinic Node */}
+          {/* Clinic selector */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-text-secondary block">Active Tenant Node</label>
             <select
-              value={selectedClinic.name}
-              onChange={(e) => handleClinicChange(e.target.value)}
-              className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+              value={selectedClinicId}
+              onChange={e => setSelectedClinicId(e.target.value)}
+              className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none"
             >
-              {CLINICS.map(c => (
-                <option key={c.name} value={c.name}>{c.name}</option>
-              ))}
+              {clinics.map(c => (<option key={c.id} value={c.id}>{c.name}</option>))}
             </select>
-            <p className="text-[10px] text-text-muted">Branding overrides apply dynamically to this clinic branch parameters.</p>
           </div>
 
-          {/* Color Accent Toggles */}
+          {/* Theme */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-text-secondary block">Branding Accent Color</label>
             <div className="flex gap-3">
-              {['teal', 'indigo', 'rose', 'emerald'].map((t) => {
-                const colors: Record<string, string> = {
-                  teal: 'bg-teal-600',
-                  indigo: 'bg-indigo-600',
-                  rose: 'bg-rose-600',
-                  emerald: 'bg-emerald-600',
-                };
-                return (
-                  <button
-                    key={t}
-                    onClick={() => setActiveTheme(t)}
-                    className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-105 border-2 cursor-pointer ${
-                      activeTheme === t ? 'border-text-primary ring-2 ring-primary-500/20' : 'border-transparent'
-                    } ${colors[t]}`}
-                  >
-                    {activeTheme === t && <Check className="w-4 h-4 text-white font-bold" />}
-                  </button>
-                );
-              })}
+              {THEMES.map(th => (
+                <button key={th} onClick={() => update({ theme: th })}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform hover:scale-105 border-2 cursor-pointer ${config.theme === th ? 'border-text-primary ring-2 ring-primary-500/20' : 'border-transparent'} ${themeClasses[th].fill}`}>
+                  {config.theme === th && <Check className="w-4 h-4 text-white" />}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Banner Copy Overrides */}
+          {/* Image uploads */}
+          <ImageField label="Logo" value={config.logo} onUpload={onImage('logo')} onClear={() => update({ logo: undefined })} />
+          <ImageField label="Hero Banner" value={config.banner} onUpload={onImage('banner')} onClear={() => update({ banner: undefined })} />
+          <ImageField label="Building Photo" value={config.building} onUpload={onImage('building')} onClear={() => update({ building: undefined })} />
+
+          {/* Hero copy */}
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-text-secondary block">Custom Hero Headline</label>
-              <input
-                type="text"
-                value={customHeadline}
-                onChange={(e) => setCustomHeadline(e.target.value)}
-                placeholder="Clinic Slogan..."
-                className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
-              />
+              <input type="text" value={config.headline} onChange={e => update({ headline: e.target.value })}
+                placeholder="Clinic Slogan..." className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
             </div>
-
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-text-secondary block">Custom Description Copy</label>
-              <textarea
-                value={customSubheadline}
-                onChange={(e) => setCustomSubheadline(e.target.value)}
-                rows={3}
-                placeholder="Provide a detailed clinic banner summary..."
-                className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200 leading-relaxed resize-none"
-              />
+              <textarea value={config.subheadline} onChange={e => update({ subheadline: e.target.value })} rows={3}
+                placeholder="Clinic banner summary..." className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none resize-none" />
             </div>
           </div>
 
-          {/* Action notice */}
-          <div className="p-3.5 bg-primary-50 border border-primary-100 rounded-lg flex gap-2">
-            <Sparkles className="w-4 h-4 text-primary-600 shrink-0 mt-0.5 animate-pulse" />
-            <p className="text-[10px] text-primary-800 leading-relaxed font-light">
-              White-label configurations serialize into client states. Any patient visiting the public link sees custom layouts, matching logos, and accent themes instantly.
-            </p>
+          {/* Motion banner */}
+          <div className="space-y-2 pt-1 border-t border-border-light">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5"><Megaphone className="w-3.5 h-3.5" /> Announcement / Offer Banner</label>
+              <label className="flex items-center gap-1.5 text-[10px] font-semibold text-text-secondary cursor-pointer select-none">
+                <input type="checkbox" checked={config.motionBanner.enabled} onChange={e => updateMotion({ enabled: e.target.checked })} className="accent-primary-600" /> On
+              </label>
+            </div>
+            {config.motionBanner.enabled && (
+              <div className="space-y-2">
+                <input type="text" value={config.motionBanner.title} onChange={e => updateMotion({ title: e.target.value })} placeholder="Banner title (e.g. Seasonal Campaign)"
+                  className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+                <input type="text" value={config.motionBanner.message} onChange={e => updateMotion({ message: e.target.value })} placeholder="Message"
+                  className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="text" value={config.motionBanner.ctaLabel} onChange={e => updateMotion({ ctaLabel: e.target.value })} placeholder="CTA label" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+                  <input type="text" value={config.motionBanner.ctaUrl} onChange={e => updateMotion({ ctaUrl: e.target.value })} placeholder="CTA link (#contact)" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Doctors */}
+          <div className="space-y-2 pt-1 border-t border-border-light">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5"><UserRound className="w-3.5 h-3.5" /> Featured Doctors (from staff)</label>
+            {staffLoading ? <p className="text-[10px] text-text-muted">Loading staff…</p> : (
+              <div className="flex flex-wrap gap-1.5">
+                {doctorCandidates.map(s => {
+                  const on = config.doctors.some(d => d.id === s.id);
+                  return (
+                    <button key={s.id} onClick={() => toggleDoctor(s)}
+                      className={`text-[10px] font-semibold px-2.5 py-1.5 rounded-full border transition-colors cursor-pointer ${on ? `${t.bgLight} border` : 'border-border text-text-secondary hover:border-primary-300'}`}>
+                      {on ? <Check className="w-3 h-3 inline mr-1" /> : null}{s.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {config.doctors.length > 0 && (
+              <div className="space-y-2">
+                {config.doctors.map(d => (
+                  <div key={d.id} className="flex items-center gap-2 p-2 border border-border rounded-lg">
+                    <img src={d.photo || 'https://via.placeholder.com/64'} alt={d.name} className="w-9 h-9 rounded-full object-cover border border-border" />
+                    <div className="flex-1 space-y-1">
+                      <p className="text-[10px] font-bold text-text-primary">{d.name}</p>
+                      <input type="text" value={d.specialty} onChange={e => setDoctorSpecialty(d.id, e.target.value)} placeholder="Specialty" className="w-full text-[10px] border border-border rounded px-2 py-1 bg-surface text-text-primary outline-none focus:ring-1 focus:ring-primary-500/20" />
+                    </div>
+                    <label className="text-[9px] font-semibold text-primary-600 cursor-pointer underline">photo
+                      <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setDoctorPhoto(d.id, await readImageAsDataUrl(f)); e.target.value = ''; }} />
+                    </label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Contact + hours */}
+          <div className="space-y-2 pt-1 border-t border-border-light">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Contact & Hours</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="text" value={config.contact.phone} onChange={e => updateContact({ phone: e.target.value })} placeholder="Phone" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+              <input type="text" value={config.contact.email} onChange={e => updateContact({ email: e.target.value })} placeholder="Email" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+            </div>
+            <input type="text" value={config.contact.address} onChange={e => updateContact({ address: e.target.value })} placeholder="Address" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+            <textarea value={config.contact.hours} onChange={e => updateContact({ hours: e.target.value })} rows={2} placeholder="Hours (one per line)" className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none resize-none" />
+          </div>
+
+          {/* About */}
+          <div className="space-y-1.5 pt-1 border-t border-border-light">
+            <label className="text-xs font-semibold text-text-secondary block">About / Mission</label>
+            <textarea value={config.about} onChange={e => update({ about: e.target.value })} rows={3} placeholder="Short clinic about text..." className="w-full text-xs border border-border rounded-lg px-2.5 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none resize-none" />
+          </div>
+
+          {/* Services */}
+          <div className="space-y-2 pt-1 border-t border-border-light">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5" /> Services</label>
+            {config.services.map((s, i) => (
+              <div key={i} className="flex items-center gap-1.5">
+                <input type="text" value={s} onChange={e => setService(i, e.target.value)} placeholder="Service name" className="flex-1 text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 outline-none" />
+                <button onClick={() => removeService(i)} className="text-danger hover:text-danger/80 p-1 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+            <button onClick={addService} className="flex items-center gap-1 text-[10px] font-semibold text-primary-600 hover:text-primary-700 cursor-pointer"><Plus className="w-3.5 h-3.5" /> Add service</button>
           </div>
         </div>
 
-        {/* Real-time Interactive Preview: 3/5 width */}
+        {/* Preview */}
         <div className="xl:col-span-3 bg-slate-900 rounded-xl border border-slate-800 overflow-hidden flex flex-col shadow-lg">
-          
-          {/* Mock Browser Header */}
           <div className="bg-slate-950 px-4 py-2 flex items-center justify-between border-b border-slate-800">
             <div className="flex gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80"></span>
-              <span className="w-2.5 h-2.5 rounded-full bg-green-500/80"></span>
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500/80" /><span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80" /><span className="w-2.5 h-2.5 rounded-full bg-green-500/80" />
             </div>
             <div className="text-[10px] font-semibold text-slate-400 bg-slate-900 border border-slate-800 px-10 py-1 rounded select-none w-[60%] text-center truncate">
-              clinicos.io/p/{selectedClinic.name.toLowerCase().replace(/ /g, '-')}
+              careme.io/p/{clinicName.toLowerCase().replace(/ /g, '-')}
             </div>
-            <span className="text-[9px] font-bold text-slate-500 select-none flex items-center gap-0.5">
-              <Eye className="w-3 h-3" /> Live Preview
-            </span>
+            <span className="text-[9px] font-bold text-slate-500 select-none flex items-center gap-0.5"><Eye className="w-3 h-3" /> Live Preview</span>
           </div>
 
-          {/* Preview Container: Renders simulated patient landing page */}
-          <div className="flex-1 bg-white p-6 overflow-y-auto max-h-[460px] space-y-8 select-none">
-            
-            {/* Nav Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex-1 bg-white overflow-y-auto max-h-[840px] select-none">
+            {/* Nav */}
+            <div className="flex items-center justify-between px-6 py-3 border-b border-slate-100">
               <div className="flex items-center gap-1.5">
-                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-white font-black text-xs ${
-                  activeTheme === 'indigo' ? 'bg-indigo-600' :
-                  activeTheme === 'rose' ? 'bg-rose-600' :
-                  activeTheme === 'emerald' ? 'bg-emerald-600' :
-                  'bg-teal-600'
-                }`}>
-                  c
-                </div>
-                <span className="font-extrabold text-xs text-slate-900 truncate max-w-[150px]">{selectedClinic.name}</span>
+                {preview.logo ? (
+                  <img src={preview.logo} alt="" className="w-7 h-7 rounded-lg object-cover" />
+                ) : (
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-xs ${t.fill}`}>c</div>
+                )}
+                <span className="font-extrabold text-xs text-slate-900 truncate max-w-[150px]">{clinicName}</span>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold text-slate-600 hover:text-slate-900 cursor-pointer">Find Doctors</span>
-                <button className={`text-[9px] font-bold px-3 py-1.5 rounded-md cursor-pointer ${
-                  activeTheme === 'indigo' ? 'bg-indigo-50 text-indigo-700' :
-                  activeTheme === 'rose' ? 'bg-rose-50 text-rose-700' :
-                  activeTheme === 'emerald' ? 'bg-emerald-50 text-emerald-700' :
-                  'bg-teal-50 text-teal-700'
-                }`}>
-                  Patient Login
-                </button>
+                <span className="text-[10px] font-bold text-slate-600">Find Doctors</span>
+                <button className={`text-[9px] font-bold px-3 py-1.5 rounded-md ${t.bgLight}`}>Patient Login</button>
               </div>
             </div>
 
-            {/* Banner Section */}
-            <div className="text-center space-y-3.5 max-w-lg mx-auto py-4">
-              <div className={`mx-auto w-fit text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${getAccentBorder(activeTheme)} ${getAccentText(activeTheme)} bg-white shadow-sm`}>
-                Official Patient Portal
+            {/* Motion banner */}
+            {preview.motionBanner.enabled && (
+              <div className={`flex items-center gap-2 px-6 py-2 ${t.fill} text-white text-[10px] font-semibold animate-pulse`}>
+                <Megaphone className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{preview.motionBanner.title} — {preview.motionBanner.message}</span>
+                {preview.motionBanner.ctaLabel && <span className="underline shrink-0 ml-auto">{preview.motionBanner.ctaLabel}</span>}
               </div>
-              <h2 className="text-lg font-black text-slate-900 leading-snug tracking-tight">
-                {customHeadline || 'Modern Specialist Care, Tailored to You'}
-              </h2>
-              <p className="text-[11px] text-slate-500 leading-relaxed font-light">
-                {customSubheadline || 'Apex clinical specialists utilizing state-of-the-art diagnostic pathways.'}
-              </p>
+            )}
 
-              {/* Action Buttons */}
-              <div className="flex justify-center gap-3 pt-2">
-                <button className={`text-[10px] font-bold px-4 py-2 rounded-lg shadow-sm cursor-pointer ${getAccentBg(activeTheme)}`}>
-                  Book Appointment
-                </button>
-                <button className="text-[10px] font-bold px-4 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 cursor-pointer">
-                  Learn More
-                </button>
+            {/* Hero / banner */}
+            {preview.banner ? (
+              <div className="relative">
+                <img src={preview.banner} alt="" className="w-full h-44 object-cover" />
+                <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center text-center px-6 space-y-2">
+                  <h2 className="text-lg font-black text-white leading-snug drop-shadow">{preview.headline || 'Your Headline'}</h2>
+                  <p className="text-[11px] text-white/90 font-light drop-shadow">{preview.subheadline}</p>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="text-center space-y-3 max-w-lg mx-auto py-8 px-6">
+                <h2 className="text-lg font-black text-slate-900">{preview.headline || 'Your Headline'}</h2>
+                <p className="text-[11px] text-slate-500 font-light">{preview.subheadline}</p>
+              </div>
+            )}
 
-            {/* Features Row */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 border border-slate-100 rounded-lg text-center space-y-1">
-                <span className={`text-[9px] font-extrabold ${getAccentText(activeTheme)}`}>01. Care Team</span>
-                <p className="font-bold text-[10px] text-slate-800">Expert Doctors</p>
-                <p className="text-[8px] text-slate-500">Board-certified personnel</p>
+            {/* Building photo */}
+            {preview.building && (
+              <div className="px-6 pt-6">
+                <img src={preview.building} alt="Clinic building" className="w-full h-40 object-cover rounded-xl border border-slate-100" />
               </div>
-              <div className="p-3 border border-slate-100 rounded-lg text-center space-y-1">
-                <span className={`text-[9px] font-extrabold ${getAccentText(activeTheme)}`}>02. Scheduling</span>
-                <p className="font-bold text-[10px] text-slate-800">Easy Booking</p>
-                <p className="text-[8px] text-slate-500">Secure digital reservations</p>
+            )}
+
+            {/* Doctors */}
+            {preview.doctors.length > 0 && (
+              <div className="px-6 py-6 space-y-3">
+                <h3 className="text-sm font-extrabold text-slate-900">Our Physicians</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {preview.doctors.map(d => (
+                    <div key={d.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-lg">
+                      <img src={d.photo || 'https://via.placeholder.com/64'} alt={d.name} className="w-10 h-10 rounded-full object-cover border border-slate-100" />
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-900 truncate">{d.name}</p>
+                        <p className="text-[9px] text-slate-500 uppercase truncate">{d.specialty || 'Specialist'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="p-3 border border-slate-100 rounded-lg text-center space-y-1">
-                <span className={`text-[9px] font-extrabold ${getAccentText(activeTheme)}`}>03. Messaging</span>
-                <p className="font-bold text-[10px] text-slate-800">Direct Contact</p>
-                <p className="text-[8px] text-slate-500">WhatsApp notifications</p>
+            )}
+
+            {/* Services */}
+            {preview.services.filter(Boolean).length > 0 && (
+              <div className="px-6 py-4 space-y-3">
+                <h3 className="text-sm font-extrabold text-slate-900">Services</h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {preview.services.filter(Boolean).map((s, i) => (
+                    <div key={i} className="p-2.5 border border-slate-100 rounded-lg text-[10px] font-semibold text-slate-700">{s}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* About */}
+            {preview.about && (
+              <div className="px-6 py-4">
+                <h3 className="text-sm font-extrabold text-slate-900 mb-1">About Us</h3>
+                <p className="text-[11px] text-slate-500 font-light leading-relaxed">{preview.about}</p>
+              </div>
+            )}
+
+            {/* Contact */}
+            <div className="px-6 py-4 grid grid-cols-3 gap-3 border-t border-slate-100">
+              <div className="text-center space-y-1">
+                <Phone className={`w-5 h-5 mx-auto ${t.text}`} />
+                <p className="text-[9px] font-bold text-slate-900">Phone</p>
+                <p className="text-[9px] text-slate-500 whitespace-pre-line">{preview.contact.phone || '—'}</p>
+              </div>
+              <div className="text-center space-y-1">
+                <MapPin className={`w-5 h-5 mx-auto ${t.text}`} />
+                <p className="text-[9px] font-bold text-slate-900">Address</p>
+                <p className="text-[9px] text-slate-500 whitespace-pre-line">{preview.contact.address || '—'}</p>
+              </div>
+              <div className="text-center space-y-1">
+                <Clock className={`w-5 h-5 mx-auto ${t.text}`} />
+                <p className="text-[9px] font-bold text-slate-900">Hours</p>
+                <p className="text-[9px] text-slate-500 whitespace-pre-line">{preview.contact.hours || '—'}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ImageField({ label, value, onUpload, onClear }: {
+  label: string; value?: string; onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void; onClear: () => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5"><ImageIcon className="w-3.5 h-3.5" /> {label}</label>
+        {value && <button onClick={onClear} className="text-[10px] font-semibold text-danger hover:text-danger/80 cursor-pointer">Remove</button>}
+      </div>
+      <label className="flex items-center justify-center gap-2 w-full text-[10px] font-semibold text-text-secondary border border-dashed border-border rounded-lg px-2.5 py-3 hover:border-primary-300 cursor-pointer transition-colors">
+        <Upload className="w-3.5 h-3.5" /> {value ? 'Replace image' : 'Upload image'}
+        <input type="file" accept="image/*" className="hidden" onChange={onUpload} />
+      </label>
+      {value && <img src={value} alt={label} className="w-full h-20 object-cover rounded-lg border border-border" />}
     </div>
   );
 }

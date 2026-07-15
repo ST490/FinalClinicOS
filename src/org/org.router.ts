@@ -40,6 +40,7 @@ const brandingSchema = z.object({
 const searchSchema = z.object({
   orgId: z.string().uuid().optional(),
   status: z.enum(['ACTIVE', 'SUSPENDED', 'PENDING', 'DELETED']).optional(),
+  clinicIds: z.array(z.string()).optional(),
   page: z.coerce.number().min(1).optional().default(1),
   limit: z.coerce.number().min(1).max(100).optional().default(20),
 });
@@ -85,10 +86,9 @@ router.delete('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'),
   } catch (e) { next(e); }
 });
 
-// Clinic routes
 router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
   try {
-    const { orgId } = req.body;
+    const orgId = req.user!.orgId;
     const clinic = await orgService.createClinic(orgId, { ...createClinicSchema.parse(req.body), createdById: req.user!.id });
     res.status(201).json(clinic);
   } catch (e) { next(e); }
@@ -96,7 +96,16 @@ router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:manage'),
 
 router.get('/clinics', authenticate, loadUserRoles, checkPerm('clinic:read'), async (req, res, next) => {
   try {
-    const result = await orgService.searchClinics(searchSchema.parse(req.query));
+    const query = searchSchema.parse(req.query);
+    // Enforce tenant isolation
+    query.orgId = req.user!.orgId;
+    // Non-org-owners only ever see the clinics they hold an active role in,
+    // so the client's default clinic context resolves to one they can access.
+    if (!req.user!.isOrgOwner) {
+      const myClinicIds = req.user!.roles.map((r) => r.clinicId).filter(Boolean);
+      query.clinicIds = myClinicIds;
+    }
+    const result = await orgService.searchClinics(query);
     res.json(result);
   } catch (e) { next(e); }
 });
@@ -105,26 +114,52 @@ router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read')
   try {
     const clinic = await orgService.getClinic(req.params.id as string);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
+    // Enforce tenant isolation
+    if (clinic.orgId !== req.user!.orgId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return;
+    }
     res.json(clinic);
   } catch (e) { next(e); }
 });
 
 router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
   try {
-    const clinic = await orgService.updateClinic(req.params.id as string, updateClinicSchema.parse(req.body));
-    res.json(clinic);
+    const clinic = await orgService.getClinic(req.params.id as string);
+    if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
+    // Enforce tenant isolation
+    if (clinic.orgId !== req.user!.orgId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return;
+    }
+    const updated = await orgService.updateClinic(req.params.id as string, updateClinicSchema.parse(req.body));
+    res.json(updated);
   } catch (e) { next(e); }
 });
 
 router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
   try {
-    const clinic = await orgService.updateBranding(req.params.id as string, brandingSchema.parse(req.body));
-    res.json(clinic);
+    const clinic = await orgService.getClinic(req.params.id as string);
+    if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
+    // Enforce tenant isolation
+    if (clinic.orgId !== req.user!.orgId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return;
+    }
+    const updated = await orgService.updateBranding(req.params.id as string, brandingSchema.parse(req.body));
+    res.json(updated);
   } catch (e) { next(e); }
 });
 
 router.delete('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
   try {
+    const clinic = await orgService.getClinic(req.params.id as string);
+    if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
+    // Enforce tenant isolation
+    if (clinic.orgId !== req.user!.orgId) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      return;
+    }
     await orgService.deleteClinic(req.params.id as string);
     res.json({ success: true });
   } catch (e) { next(e); }

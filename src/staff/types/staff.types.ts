@@ -21,6 +21,27 @@ export interface UpdateStaffRoleInput {
   clinicId: string;
   role: UserRoleType;
   isPrimary?: boolean;
+  // HR attributes (per clinic)
+  designation?: string;
+  wageType?: 'MONTHLY' | 'DAILY' | 'HOURLY';
+  baseRate?: number | string; // maps to `salary` column
+  shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL';
+  employmentType?: 'PERMANENT' | 'CONTRACT';
+  joiningDate?: string;
+}
+
+// Non-clinical support workers added directly as ACTIVE staff, no invite/login.
+export type DirectAddRole = 'SUPPORT';
+
+export interface DirectAddStaffInput {
+  orgId: string;
+  clinicId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  role: DirectAddRole;
+  department?: string;
+  salary?: number | string;
 }
 
 export interface StaffScheduleInput {
@@ -51,10 +72,19 @@ export interface ClinicRoleResponse {
   role: UserRoleType;
   isPrimary: boolean;
   status: string;
+  // HR attributes (per clinic)
+  department?: string | null;
+  designation?: string | null;
+  wageType?: 'MONTHLY' | 'DAILY' | 'HOURLY' | null;
+  baseRate?: number | null; // from `salary` column
+  shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL' | null;
+  employmentType?: 'PERMANENT' | 'CONTRACT' | null;
+  joiningDate?: string | null;
 }
 
 export interface InvitationResponse {
   inviteId: string;
+  token?: string;
   message: string;
 }
 

@@ -43,9 +43,40 @@ class AuthService {
         OR: [{ email: email || undefined }, { phone: phone || undefined }].filter(Boolean) as any[],
         status: 'ACTIVE'
       },
-      include: { clinicRoles: { where: { status: 'ACTIVE' }, include: { clinic: { select: { id: true, name: true } } } } },
+      include: {
+        clinicRoles: { where: { status: 'ACTIVE' }, include: { clinic: { select: { id: true, name: true } } } },
+        org: { select: { id: true, name: true } },
+      },
     });
-    if (!user) throw new Error('Invalid credentials');
+    if (!user) {
+      const tokenHash = hashToken(password);
+      const invite = await this.prisma.invite.findFirst({
+        where: {
+          OR: [{ email: email || undefined }, { phone: phone || undefined }].filter(Boolean) as any[],
+          tokenHash,
+          status: 'pending',
+          expiresAt: { gt: new Date() }
+        }
+      });
+      if (invite) {
+        return {
+          isInviteLogin: true,
+          inviteToken: password,
+          tokens: { accessToken: '', refreshToken: '', expiresIn: 0 },
+          user: {
+            id: '',
+            email: invite.email || '',
+            phone: invite.phone || '',
+            name: '',
+            orgId: invite.orgId,
+            isOrgOwner: false,
+            roles: [],
+            twoFactorEnabled: false
+          }
+        };
+      }
+      throw new Error('Invalid credentials');
+    }
 
     const valid = verifyPassword(password, user.passwordHash || '');
     if (!valid) throw new Error('Invalid credentials');
@@ -79,7 +110,8 @@ class AuthService {
     const refreshToken = generateRefreshToken();
     await this.saveRefreshToken(this.prisma, user.id, refreshToken);
     const tokens = await this.generateTokens(user, activeClinicId, refreshToken);
-    return { tokens, user: this.formatUserProfile(user, user.clinicRoles, user.orgId) };
+    const profile = this.formatUserProfile(user, user.clinicRoles, user.orgId);
+    return { tokens, user: { ...profile, orgName: (user as any).org?.name || null } };
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
@@ -176,12 +208,31 @@ class AuthService {
       await tx.invite.update({ where: { id: invite.id }, data: { status: 'accepted', acceptedById: userId } });
 
       const refreshToken = generateRefreshToken();
-      const tokens = { accessToken: refreshToken, refreshToken, expiresIn: getAccessTokenExpiry() }; // placeholder
+      await this.saveRefreshToken(tx, userId, refreshToken);
 
-      return { tokens, userId, clinicId: invite.clinicId };
+      const userRecord = await tx.user.findUnique({
+        where: { id: userId },
+        include: {
+          clinicRoles: {
+            where: { status: 'ACTIVE' },
+            include: { clinic: { select: { id: true, name: true } } },
+          },
+          org: { select: { id: true, name: true } },
+        },
+      });
+
+      if (!userRecord) throw new Error('User not found after creation');
+
+      const tokens = await this.generateTokens(userRecord, invite.clinicId, refreshToken);
+
+      return { tokens, user: userRecord };
     });
 
-    return { tokens: result.tokens, user: { id: result.userId, email: invite.email, phone: invite.phone, name, orgId: invite.orgId, isOrgOwner: false, roles: [], twoFactorEnabled: false } };
+    const profile = this.formatUserProfile(result.user, result.user.clinicRoles, invite.orgId);
+    return {
+      tokens: result.tokens,
+      user: { ...profile, orgName: (result.user as any).org?.name || null },
+    };
   }
 
   async setup2FA(userId: string): Promise<Setup2FAResponse> {
@@ -189,7 +240,7 @@ class AuthService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error('User not found');
 
-    const otpauthUrl = authenticator.keyuri(user.email || user.phone || 'unknown', 'ClinicOS', secret);
+    const otpauthUrl = authenticator.keyuri(user.email || user.phone || 'unknown', 'Careme', secret);
     const qrCodeUrl = await QRCode.toDataURL(otpauthUrl);
     await this.prisma.user.update({ where: { id: userId }, data: { twoFactorSecret: encrypt2FASecret(secret) } });
 
@@ -244,21 +295,51 @@ class AuthService {
     await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
   }
 
-  async switchClinic(userId: string, clinicId: string): Promise<{ accessToken: string; activeClinicId: string }> {
-    const role = await this.prisma.userClinicRole.findFirst({ where: { userId, clinicId, status: 'ACTIVE' } });
-    if (!role) throw new Error('Access denied to this clinic');
-
+  async switchClinic(userId: string, clinicId: string | null): Promise<{ accessToken: string; activeClinicId: string | null }> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new Error('User not found');
 
-    const accessToken = generateAccessToken({ sub: userId, orgId: user.orgId, activeClinicId: clinicId, roles: [role.role], isOrgOwner: user.isOrgOwner, is2FAEnabled: user.twoFactorEnabled });
+    let roles: any[] = [];
+    if (clinicId) {
+      if (user.isOrgOwner) {
+        // Org owner can access any clinic in their org
+        const clinic = await this.prisma.clinic.findUnique({ where: { id: clinicId } });
+        if (!clinic || clinic.orgId !== user.orgId) {
+          throw new Error('Access denied to this clinic');
+        }
+        roles = ['MASTER'];
+      } else {
+        const role = await this.prisma.userClinicRole.findFirst({ where: { userId, clinicId, status: 'ACTIVE' } });
+        if (!role) throw new Error('Access denied to this clinic');
+        roles = [role.role];
+      }
+    } else {
+      // Clear clinic context
+      roles = user.isOrgOwner ? ['MASTER'] : [];
+    }
+
+    const accessToken = generateAccessToken({
+      sub: userId,
+      orgId: user.orgId,
+      activeClinicId: clinicId,
+      roles,
+      isOrgOwner: user.isOrgOwner,
+      is2FAEnabled: user.twoFactorEnabled
+    });
     return { accessToken, activeClinicId: clinicId };
   }
 
   async getMe(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, include: { clinicRoles: { where: { status: 'ACTIVE' }, include: { clinic: { select: { id: true, name: true } } } } } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        clinicRoles: { where: { status: 'ACTIVE' }, include: { clinic: { select: { id: true, name: true } } } },
+        org: { select: { id: true, name: true } },
+      }
+    });
     if (!user) throw new Error('User not found');
-    return this.formatUserProfile(user, user.clinicRoles, user.orgId);
+    const profile = this.formatUserProfile(user, user.clinicRoles, user.orgId);
+    return { ...profile, orgName: (user as any).org?.name || null };
   }
 
   private async generateTokens(user: any, activeClinicId: string | null, refreshToken: string): Promise<AuthTokens> {
