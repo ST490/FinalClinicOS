@@ -20,7 +20,7 @@
     "worker:sweep": "tsx src/notifications/reminder-processor.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "5.22.0",
     "bcrypt": "^5.1.1",
     "bullmq": "^5.79.2",
     "cors": "^2.8.5",
@@ -43,7 +43,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.9.0",
     "@types/qrcode": "^1.5.5",
-    "prisma": "^5.22.0",
+    "prisma": "5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.5"
