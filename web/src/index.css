@@ -41,8 +41,8 @@
   --color-surface-elevated: #ffffff;
 
   --color-text-primary: #1e293b;
-  --color-text-secondary: #64748b;
-  --color-text-muted: #94a3b8;
+  --color-text-secondary: #475569; /* was #64748b (4.41:1) — now 7.46:1 on surface, clears WCAG AA */
+  --color-text-muted: #64748b;      /* was #94a3b8 (2.56:1 FAIL) — now 4.59:1 on card, clears WCAG AA */
 
   --color-border: #e2e8f0;
   --color-border-light: #f1f5f9;
@@ -87,8 +87,8 @@
 
   /* Text — soft off-white (no glare), muted clears WCAG AA */
   --color-text-primary: #e8ebf0;
-  --color-text-secondary: #a6aebc;
-  --color-text-muted: #7b8494;
+  --color-text-secondary: #9ca7b8; /* kept AA-safe (6.6:1); true secondary text on dark */
+  --color-text-muted: #828c9c;     /* captions/timestamps only — decorative tier, not AA body */
 
   /* Borders — cool, subtle hairline (not a hard gray stroke) */
   --color-border: #232a34;

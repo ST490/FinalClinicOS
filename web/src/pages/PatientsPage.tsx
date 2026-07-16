@@ -62,17 +62,17 @@ interface Patient {
 // ─── Sub-components ────────────────────────────────────────
 
 const statusConfig: Record<PatientStatus, { color: string; bg: string; dot: string }> = {
-  Active: { color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', dot: 'bg-emerald-500' },
-  Inactive: { color: 'text-slate-600', bg: 'bg-slate-100 border-slate-200', dot: 'bg-slate-400' },
-  Critical: { color: 'text-red-700', bg: 'bg-red-50 border-red-200', dot: 'bg-red-500 animate-pulse' },
-  Discharged: { color: 'text-sky-700', bg: 'bg-sky-50 border-sky-200', dot: 'bg-sky-500' },
+  Active: { color: 'text-emerald-700 dark:text-emerald-300', bg: 'bg-emerald-50 border-emerald-200 dark:bg-emerald-500/15 dark:border-emerald-500/25', dot: 'bg-emerald-500' },
+  Inactive: { color: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-100 border-slate-200 dark:bg-slate-500/15 dark:border-slate-500/25', dot: 'bg-slate-400' },
+  Critical: { color: 'text-red-700 dark:text-red-300', bg: 'bg-red-50 border-red-200 dark:bg-red-500/15 dark:border-red-500/25', dot: 'bg-red-500 animate-pulse' },
+  Discharged: { color: 'text-sky-700 dark:text-sky-300', bg: 'bg-sky-50 border-sky-200 dark:bg-sky-500/15 dark:border-sky-500/25', dot: 'bg-sky-500' },
 };
 
 const bloodGroupColor: Record<BloodGroup, string> = {
-  'A+': 'bg-red-100 text-red-700', 'A-': 'bg-red-100 text-red-700',
-  'B+': 'bg-orange-100 text-orange-700', 'B-': 'bg-orange-100 text-orange-700',
-  'AB+': 'bg-purple-100 text-purple-700', 'AB-': 'bg-purple-100 text-purple-700',
-  'O+': 'bg-blue-100 text-blue-700', 'O-': 'bg-blue-100 text-blue-700',
+  'A+': 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300', 'A-': 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+  'B+': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300', 'B-': 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-300',
+  'AB+': 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300', 'AB-': 'bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300',
+  'O+': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300', 'O-': 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
 };
 
 // Patient Detail Drawer
@@ -130,9 +130,9 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
             <>
               {/* Alert bar */}
               {patient.status === 'Critical' && (
-                <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-                  <p className="text-sm font-semibold text-red-700">Critical patient — requires close monitoring. Review latest vitals below.</p>
+                <div className="flex items-center gap-3 bg-danger/10 border border-danger/30 rounded-xl px-4 py-3">
+                  <AlertTriangle className="w-5 h-5 text-danger flex-shrink-0" />
+                  <p className="text-sm font-semibold text-danger">Critical patient — requires close monitoring. Review latest vitals below.</p>
                 </div>
               )}
 
@@ -257,7 +257,7 @@ function PatientDrawer({ patient, onClose }: { patient: Patient; onClose: () => 
                       <p className="text-xs text-text-muted">Currently prescribed</p>
                     </div>
                     <div className="ml-auto">
-                      <span className="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">Active</span>
+                      <span className="text-xs bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 px-2 py-0.5 rounded-full font-semibold">Active</span>
                     </div>
                   </div>
                 ))
@@ -284,7 +284,7 @@ function InfoBox({ icon, label, value, valueClass = '' }: { icon: React.ReactNod
 
 function StatStrip({ label, value, icon, urgent = false }: { label: string; value: string; icon: React.ReactNode; urgent?: boolean }) {
   return (
-    <div className={`rounded-xl border p-3.5 text-center ${urgent ? 'border-amber-200 bg-amber-50/50' : 'border-border bg-surface/50'}`}>
+    <div className={`rounded-xl border p-3.5 text-center ${urgent ? 'border-amber-500/30 bg-amber-500/10' : 'border-border bg-surface/50'}`}>
       <div className="flex justify-center mb-1">{icon}</div>
       <p className={`text-sm font-bold ${urgent ? 'text-amber-700' : 'text-text-primary'}`}>{value}</p>
       <p className="text-xs text-text-muted mt-0.5">{label}</p>
@@ -294,7 +294,7 @@ function StatStrip({ label, value, icon, urgent = false }: { label: string; valu
 
 function VitalCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
   return (
-    <div className="bg-white border border-border rounded-xl p-3 flex items-center gap-2.5">
+    <div className="bg-surface-card border border-border rounded-xl p-3 flex items-center gap-2.5">
       <div className="flex-shrink-0">{icon}</div>
       <div>
         <p className="text-xs text-text-muted">{label}</p>
@@ -307,26 +307,37 @@ function VitalCard({ label, value, icon }: { label: string; value: string; icon:
 // Add New Patient Modal
 function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreated?: () => void }) {
   const { clinics, clinic: authClinic } = useAuth();
-  const [form, setForm] = useState({ name: '', age: '', gender: 'Male', bloodGroup: 'O+', phone: '', email: '', clinic: authClinic?.name ?? '', conditions: '', allergies: '' });
+  const [form, setForm] = useState({
+    name: '', age: '', gender: 'MALE', bloodGroup: 'O+', phone: '', email: '',
+    clinicId: authClinic?.id ?? '', dateOfBirth: '', address: '', city: '', state: '', postalCode: '',
+    conditions: '', allergies: '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const handleCreate = async () => {
     if (!form.name) { setError('Name is required'); return; }
+    if (!form.clinicId) { setError('Select a clinic'); return; }
     setError('');
     setSaving(true);
 
-    // Real API call
+    // Real API call — field names match the backend createPatientSchema
+    // (clinicId, bloodGroup, medicalHistory, uppercase gender enum).
     const { error: apiErr } = await apiMutate(() =>
       patientApi.create({
+        clinicId: form.clinicId,
         name: form.name,
         email: form.email || null,
         phone: form.phone || null,
-        dateOfBirth: null,
-        gender: form.gender || null,
-        bloodType: form.bloodGroup || null,
+        dateOfBirth: form.dateOfBirth || null,
+        gender: (form.gender || null) as any,
+        bloodGroup: form.bloodGroup || null,
         allergies: form.allergies ? form.allergies.split(',').map(s => s.trim()) : [],
-        notes: form.conditions || null,
+        medicalHistory: form.conditions || null,
+        address: form.address || undefined,
+        city: form.city || undefined,
+        state: form.state || undefined,
+        postalCode: form.postalCode || undefined,
       }),
     );
     setSaving(false);
@@ -336,8 +347,8 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-surface-card rounded-2xl border border-border shadow-2xl w-full max-w-lg">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 px-4 pb-12 bg-black/50 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-surface-card rounded-2xl border border-border shadow-2xl w-full max-w-lg shrink-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
             <h3 className="font-bold text-text-primary text-base">Register New Patient</h3>
@@ -367,8 +378,12 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Gender *</label>
               <select value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                <option>Male</option><option>Female</option><option>Other</option>
+                <option value="MALE">Male</option><option value="FEMALE">Female</option><option value="OTHER">Other</option><option value="PREFER_NOT_TO_SAY">Prefer not to say</option>
               </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Date of Birth</label>
+              <input type="date" value={form.dateOfBirth} onChange={e => setForm({ ...form, dateOfBirth: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
             </div>
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Blood Group</label>
@@ -378,8 +393,8 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
             </div>
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Clinic</label>
-              <select value={form.clinic} onChange={e => setForm({ ...form, clinic: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
-                {clinics.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              <select value={form.clinicId} onChange={e => setForm({ ...form, clinicId: e.target.value })} className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                {clinics.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
@@ -390,9 +405,25 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Email</label>
               <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="patient@email.com" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
             </div>
+            <div className="col-span-2">
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Address</label>
+              <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Street address" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
+            </div>
             <div>
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">City</label>
+              <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="City" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">State</label>
+              <input value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} placeholder="State" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
+            </div>
+            <div className="col-span-2">
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Known Conditions</label>
               <input value={form.conditions} onChange={e => setForm({ ...form, conditions: e.target.value })} placeholder="e.g. Hypertension, Diabetes" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Postal Code</label>
+              <input value={form.postalCode} onChange={e => setForm({ ...form, postalCode: e.target.value })} placeholder="Postal code" className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-surface text-text-primary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder:text-text-muted" />
             </div>
             <div>
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Known Allergies</label>
@@ -431,7 +462,7 @@ export default function PatientsPage() {
 
   // ── Fetch patients from API ──
   const { data: apiPatients, loading, error, refetch } = useApiQuery(
-    () => patientApi.list({ search: search || undefined, page: 1, limit: 100 }),
+    () => patientApi.list({ query: search || undefined, page: 1, limit: 100 }),
     { skip: !authClinic?.id, deps: [refetchKey, search, authClinic?.id] },
   );
 
@@ -446,12 +477,12 @@ export default function PatientsPage() {
       dob: p.dateOfBirth || '',
       phone: p.phone || '',
       email: p.email || '',
-      bloodGroup: (p.bloodType as BloodGroup) || 'O+',
+      bloodGroup: (p.bloodGroup as BloodGroup) || 'O+',
       address: '',
       clinic: authClinic?.name || 'Unknown Clinic',
       status: 'Active' as PatientStatus,
       allergies: p.allergies || [],
-      conditions: p.notes ? [p.notes] : [],
+      conditions: p.medicalHistory ? [p.medicalHistory] : [],
       lastVisit: '',
       nextAppointment: null,
       totalVisits: 0,
@@ -486,7 +517,7 @@ export default function PatientsPage() {
     setRefetchKey(k => k + 1);
   }, []);
 
-  const canRegister = ['SUB_MASTER', 'RECEPTIONIST', 'NURSE'].includes(role);
+  const canRegister = ['SUB_MASTER', 'RECEPTIONIST', 'NURSE', 'DOCTOR'].includes(role);
 
   return (
     <div className="space-y-6">
@@ -515,13 +546,13 @@ export default function PatientsPage() {
       {/* Stats Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total Patients', value: stats.total, icon: <Users className="w-5 h-5 text-primary-600" />, bg: 'bg-primary-50 border-primary-100' },
-          { label: 'Active Patients', value: stats.active, icon: <UserCheck className="w-5 h-5 text-emerald-600" />, bg: 'bg-emerald-50 border-emerald-100' },
-          { label: 'Critical', value: stats.critical, icon: <AlertTriangle className="w-5 h-5 text-red-600" />, bg: 'bg-red-50 border-red-100' },
-          { label: 'Outstanding Dues', value: stats.duesOutstanding, icon: <TrendingUp className="w-5 h-5 text-amber-600" />, bg: 'bg-amber-50 border-amber-100' },
+          { label: 'Total Patients', value: stats.total, icon: <Users className="w-5 h-5 text-primary-500" />, chip: 'bg-primary-500/10' },
+          { label: 'Active Patients', value: stats.active, icon: <UserCheck className="w-5 h-5 text-emerald-500" />, chip: 'bg-emerald-500/10' },
+          { label: 'Critical', value: stats.critical, icon: <AlertTriangle className="w-5 h-5 text-red-500" />, chip: 'bg-red-500/10' },
+          { label: 'Outstanding Dues', value: stats.duesOutstanding, icon: <TrendingUp className="w-5 h-5 text-amber-500" />, chip: 'bg-amber-500/10' },
         ].map(s => (
-          <div key={s.label} className={`rounded-xl border p-4 flex items-center gap-3 ${s.bg}`} style={{ boxShadow: 'var(--shadow-card)' }}>
-            <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-white/70 flex items-center justify-center shadow-sm">
+          <div key={s.label} className="rounded-xl border border-border bg-surface-card p-4 flex items-center gap-3" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${s.chip}`}>
               {s.icon}
             </div>
             <div>
@@ -626,14 +657,14 @@ export default function PatientsPage() {
                       <td className="px-4 py-4 hidden xl:table-cell">
                         <div className="flex flex-wrap gap-1 max-w-[200px]">
                           {p.conditions.slice(0, 2).map(c => (
-                            <span key={c} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{c}</span>
+                            <span key={c} className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{c}</span>
                           ))}
                           {p.conditions.length > 2 && <span className="text-xs text-text-muted">+{p.conditions.length - 2}</span>}
                         </div>
                       </td>
                       <td className="px-4 py-4">
                         {p.outstandingDues > 0
-                          ? <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">${p.outstandingDues}</span>
+                          ? <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/25 px-2 py-0.5 rounded-full">${p.outstandingDues}</span>
                           : <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Clear</span>
                         }
                       </td>
@@ -696,7 +727,7 @@ export default function PatientsPage() {
                 {p.conditions.length > 0 && (
                   <div className="flex flex-wrap gap-1 mb-3">
                     {p.conditions.slice(0, 2).map(c => (
-                      <span key={c} className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">{c}</span>
+                      <span key={c} className="text-xs bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25 px-1.5 py-0.5 rounded-md">{c}</span>
                     ))}
                     {p.conditions.length > 2 && <span className="text-xs text-text-muted self-center">+{p.conditions.length - 2}</span>}
                   </div>
@@ -705,7 +736,7 @@ export default function PatientsPage() {
                 <div className="flex items-center justify-between pt-3 border-t border-border">
                   <span className="font-mono text-xs text-text-muted">{p.id}</span>
                   {p.outstandingDues > 0
-                    ? <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">${p.outstandingDues} due</span>
+                    ? <span className="text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-500/15 border border-amber-500/25 px-2 py-0.5 rounded-full">${p.outstandingDues} due</span>
                     : <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Settled</span>
                   }
                 </div>

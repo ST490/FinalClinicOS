@@ -297,7 +297,7 @@ export default function PublicLandingPage() {
 
       {/* Booking Overlay Modal */}
       {isBookingOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
           <div className="bg-white rounded-xl border border-slate-100 max-w-md w-full p-6 shadow-2xl relative space-y-4">
             <button
               onClick={() => { setIsBookingOpen(false); setBookingSuccess(false); }}

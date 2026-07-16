@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { CreditCard, Filter, Plus, Search, Landmark, Check, AlertCircle, TrendingUp, Receipt } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import ModalPortal from '../components/ModalPortal';
 import { useAuth } from '../context/AuthContext';
 import { billingApi } from '../lib/billing';
 import { patientApi } from '../lib/patients';
 import { useApiQuery, apiMutate } from '../lib/useApiQuery';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import EmptyState from '../components/ui/EmptyState';
+import StatCard from '../components/ui/StatCard';
 import ErrorBanner from '../components/ui/ErrorBanner';
 
 interface DueInvoice {
@@ -18,7 +21,7 @@ interface DueInvoice {
 }
 
 export default function DuesPage() {
-  const { clinic: authClinic, clinics } = useAuth();
+  const { clinic: authClinic, clinics, user } = useAuth();
   const [refetchKey, setRefetchKey] = useState(0);
 
   // Fetch from API
@@ -50,8 +53,8 @@ export default function DuesPage() {
 
   // Fetch real patients list
   const { data: realPatients } = useApiQuery(
-    () => patientApi.list({ limit: 200 }),
-    { skip: !authClinic?.id }
+    () => patientApi.list({ clinicId: authClinic?.id ?? undefined, limit: 200 }),
+    { skip: !user }
   );
 
   // Filters State
@@ -82,6 +85,16 @@ export default function DuesPage() {
       billingApi.recordPayment(id, { amount: duesList.find(d => d.id === id)?.amount || 0, paymentMethod: 'CASH' }),
     );
     if (!apiErr) {
+      setDuesList(prev => prev.map(due => (due.id === id ? { ...due, status: 'PAID' } : due)));
+    }
+  };
+
+  const handleWaive = async (id: string) => {
+    const reason = window.prompt('Reason for waiving this due?');
+    if (!reason) return;
+    const { error: apiErr } = await apiMutate(() => billingApi.waive(id, { reason }));
+    if (!apiErr) {
+      // Waived dues clear their balance; reflect as settled in the ledger view.
       setDuesList(prev => prev.map(due => (due.id === id ? { ...due, status: 'PAID' } : due)));
     }
   };
@@ -174,7 +187,7 @@ export default function DuesPage() {
         </div>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer"
+          className="flex items-center justify-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2.5 rounded-lg transition-all shadow-md hover:shadow-lg ring-1 ring-primary-500/30 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           Record New Invoice
@@ -183,39 +196,36 @@ export default function DuesPage() {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Total Outstanding Balance</p>
-            <p className="text-2xl font-black text-danger mt-1">${totalDuesUnpaid.toLocaleString()}</p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-danger">
-            <AlertCircle className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Total Collected Payments</p>
-            <p className="text-2xl font-black text-success mt-1">${totalCollected.toLocaleString()}</p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-success">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </div>
-
-        <div className="bg-surface-card rounded-xl border border-border p-4 flex items-center justify-between shadow-sm">
-          <div>
-            <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Collection Ratio</p>
-            <p className="text-2xl font-black text-primary-700 mt-1">
-              {totalCollected + totalDuesUnpaid > 0
+        <StatCard
+          data={{
+            id: 'dues-outstanding',
+            title: 'Total Outstanding Balance',
+            value: `$${totalDuesUnpaid.toLocaleString()}`,
+            icon: 'AlertCircle',
+            accent: totalDuesUnpaid > 0 ? 'danger' : 'default',
+          }}
+        />
+        <StatCard
+          data={{
+            id: 'dues-collected',
+            title: 'Total Collected Payments',
+            value: `$${totalCollected.toLocaleString()}`,
+            icon: 'TrendingUp',
+            accent: 'positive',
+          }}
+        />
+        <StatCard
+          data={{
+            id: 'dues-ratio',
+            title: 'Collection Ratio',
+            value:
+              totalCollected + totalDuesUnpaid > 0
                 ? `${Math.round((totalCollected / (totalCollected + totalDuesUnpaid)) * 100)}%`
-                : '100%'}
-            </p>
-          </div>
-          <div className="w-10 h-10 rounded-lg bg-primary-50 flex items-center justify-center text-primary-600">
-            <Landmark className="w-5 h-5" />
-          </div>
-        </div>
+                : '100%',
+            icon: 'Landmark',
+            accent: 'positive',
+          }}
+        />
       </div>
 
       {/* Filter Control Bar */}
@@ -224,13 +234,13 @@ export default function DuesPage() {
           <Filter className="w-3.5 h-3.5" /> Filters
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-          {/* Clinic filter */}
-          <div>
-            <label className="text-[10px] font-bold text-text-secondary block mb-1">Select Clinic</label>
+          {/* Clinic filter (primary scope filter — wider + subtle tint) */}
+          <div className="sm:col-span-2">
+            <label className="text-[10px] font-bold text-primary-600 dark:text-primary-400 block mb-1">Select Clinic</label>
             <select
               value={clinicFilter}
               onChange={(e) => setClinicFilter(e.target.value)}
-              className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+              className="w-full text-xs border border-primary-300/40 dark:border-primary-500/30 rounded-lg px-2.5 py-2 bg-primary-50/40 dark:bg-primary-50/20 text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
             >
               <option value="ALL">All Clinics (All locations)</option>
               {clinics.map(c => (
@@ -245,7 +255,7 @@ export default function DuesPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+              className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
             >
               <option value="ALL">All Payments</option>
               <option value="UNPAID">Outstanding Dues Only</option>
@@ -259,7 +269,7 @@ export default function DuesPage() {
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+              className="w-full text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
             >
               <option value="ALL">All Dates</option>
               <option value="7DAYS">Last 7 Days</option>
@@ -277,7 +287,7 @@ export default function DuesPage() {
                 placeholder="Type patient name..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full text-xs border border-border rounded-lg pl-8 pr-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+                className="w-full text-xs border border-border rounded-lg pl-8 pr-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
               />
             </div>
           </div>
@@ -324,12 +334,20 @@ export default function DuesPage() {
                       <td className="px-5 py-4 text-center">
                         <div className="flex items-center justify-center gap-2">
                           {due.status === 'UNPAID' ? (
-                            <button
-                              onClick={() => handleMarkAsPaid(due.id)}
-                              className="flex items-center gap-1 text-[11px] font-semibold text-white bg-success hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer"
-                            >
-                              <Check className="w-3 h-3" /> Mark Paid
-                            </button>
+                            <>
+                              <button
+                                onClick={() => handleMarkAsPaid(due.id)}
+                                className="flex items-center gap-1 text-[11px] font-semibold text-white bg-success hover:bg-emerald-600 px-3 py-1.5 rounded-lg transition-colors shadow-sm cursor-pointer"
+                              >
+                                <Check className="w-3 h-3" /> Mark Paid
+                              </button>
+                              <button
+                                onClick={() => handleWaive(due.id)}
+                                className="flex items-center gap-1 text-[11px] font-semibold text-text-primary bg-surface hover:bg-slate-200 px-3 py-1.5 rounded-lg border border-border transition-colors cursor-pointer"
+                              >
+                                Waive
+                              </button>
+                            </>
                           ) : (
                             <button
                               onClick={() => alert(`Billing verification: Invoice receipt requested for patient ${due.patientName}.`)}
@@ -343,14 +361,7 @@ export default function DuesPage() {
                     </tr>
                   ))
                 ) : (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-text-secondary">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <Landmark className="w-8 h-8 text-text-muted" />
-                        <p className="font-semibold text-sm">No ledger entries match your filter criteria</p>
-                      </div>
-                    </td>
-                  </tr>
+                  <EmptyState icon={Landmark} message="No ledger entries match your filter criteria" colSpan={6} />
                 )}
               </tbody>
             </table>
@@ -360,8 +371,8 @@ export default function DuesPage() {
 
       {/* Record Invoice Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl">
+        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
+          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Record New Invoice Entry</h3>
               <button
@@ -388,7 +399,7 @@ export default function DuesPage() {
                 <select
                   value={newPatient}
                   onChange={(e) => setNewPatient(e.target.value)}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
                 >
                   {(realPatients?.data || []).length === 0 ? (
                     <option value="">No patients registered - please add one first</option>
@@ -405,7 +416,7 @@ export default function DuesPage() {
                 <select
                   value={newClinic}
                   onChange={(e) => setNewClinic(e.target.value)}
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
                 >
                   {clinics.map(c => (
                     <option key={c.id} value={c.name}>{c.name}</option>
@@ -421,7 +432,7 @@ export default function DuesPage() {
                   onChange={(e) => setNewAmount(e.target.value)}
                   placeholder="e.g. 150"
                   min="1"
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
                 />
               </div>
 
@@ -454,7 +465,7 @@ export default function DuesPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
     </div>
   );

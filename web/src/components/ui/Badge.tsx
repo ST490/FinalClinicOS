@@ -5,11 +5,11 @@ interface BadgeProps {
 }
 
 const variantClasses: Record<string, string> = {
-  success: 'bg-emerald-50 text-emerald-700 ring-emerald-600/10',
-  warning: 'bg-amber-50 text-amber-700 ring-amber-600/10',
-  danger: 'bg-red-50 text-red-700 ring-red-600/10',
-  info: 'bg-blue-50 text-blue-700 ring-blue-600/10',
-  neutral: 'bg-slate-100 text-slate-600 ring-slate-500/10',
+  success: 'bg-success/15 text-success ring-success/20',
+  warning: 'bg-warning/15 text-warning ring-warning/20',
+  danger: 'bg-danger/15 text-danger ring-danger/20',
+  info: 'bg-info/15 text-info ring-info/20',
+  neutral: 'bg-text-muted/15 text-text-secondary ring-text-muted/20',
 };
 
 export default function Badge({ variant = 'neutral', children, size = 'sm' }: BadgeProps) {

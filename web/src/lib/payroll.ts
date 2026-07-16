@@ -14,6 +14,8 @@ export interface Payslip {
   bonus: number;
   deduction: number;
   net: number;
+  overtimeHours?: number;
+  overtimePay?: number;
   status: 'DRAFT' | 'APPROVED' | 'PAID';
   paidAt: string | null;
   createdAt: string;

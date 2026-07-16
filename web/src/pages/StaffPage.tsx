@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import ModalPortal from '../components/ModalPortal';
 
 const ROLE_LABELS: Record<string, string> = {
   MASTER: 'CEO / Admin',
@@ -516,8 +517,8 @@ export default function StaffPage() {
 
       {/* Invite Modal */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
+        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
+          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-primary-500" />
               Invite Staff Member
@@ -641,13 +642,13 @@ export default function StaffPage() {
               </form>
             )}
           </div>
-        </div>
+        </div></ModalPortal>
       )}
 
       {/* Direct Add Modal — non-clinical staff, no invite/login */}
       {isDirectAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
+        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
+          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-500" />
               Add Staff Directly
@@ -807,13 +808,13 @@ export default function StaffPage() {
               </div>
             </form>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
 
       {/* Offboard confirmation — must type "remove" to confirm */}
       {deactivateTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
+        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
+          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
             <h3 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
               <UserMinus className="w-5 h-5 text-danger" />
               Remove Staff Member
@@ -851,7 +852,7 @@ export default function StaffPage() {
               </button>
             </div>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
     </div>
   );

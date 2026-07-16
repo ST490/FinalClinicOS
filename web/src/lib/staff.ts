@@ -25,6 +25,7 @@ export interface StaffMember {
     joiningDate?: string | null;
   }[];
   createdAt: string;
+  dateOfBirth?: string | null;
 }
 
 export interface StaffInvite {
@@ -39,7 +40,7 @@ export interface StaffInvite {
 }
 
 export const staffApi = {
-  list: async (params?: { clinicId?: string }): Promise<StaffMember[]> => {
+  list: async (params?: { clinicId?: string; includeInactive?: boolean }): Promise<StaffMember[]> => {
     const res = await api.get<StaffMember[]>('/staff', { params });
     return res.data;
   },
@@ -78,7 +79,9 @@ export const staffApi = {
     phone?: string;
     role: 'SUPPORT';
     department?: string;
+    wageType?: 'MONTHLY' | 'DAILY' | 'HOURLY';
     salary?: number;
+    employmentType?: 'PERMANENT' | 'CONTRACT';
   }): Promise<{ user: StaffMember; clinicRole?: any }> => {
     const res = await api.post<{ user: StaffMember; clinicRole?: any }>('/staff/direct-add', data);
     return res.data;
@@ -101,6 +104,7 @@ export const staffApi = {
     shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL';
     employmentType?: 'PERMANENT' | 'CONTRACT';
     joiningDate?: string;
+    department?: string;
   }): Promise<any> => {
     const res = await api.patch<any>(`/staff/${userId}/role`, data);
     return res.data;
@@ -113,11 +117,25 @@ export const staffApi = {
     startTime: string;
     endTime: string;
     slotDuration?: number;
+    shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL';
   }): Promise<StaffSchedule> => {
     const res = await api.post<StaffSchedule>('/staff/schedules', data);
     return res.data;
   },
 };
+
+// A staff member is offboarded when their primary clinic role is DISABLED.
+export function isOffboarded(m: StaffMember, clinicId?: string): boolean {
+  const role =
+    m.clinicRoles?.find((r) => !clinicId || r.clinicId === clinicId) ??
+    m.clinicRoles?.[0];
+  return role?.status === 'DISABLED' || m.status === 'DISABLED';
+}
+
+// Stable sort that keeps offboarded staff at the end (preserving input order within each group).
+export function sortOffboardedLast<T extends StaffMember>(list: T[], clinicId?: string): T[] {
+  return [...list].sort((a, b) => Number(isOffboarded(a, clinicId)) - Number(isOffboarded(b, clinicId)));
+}
 
 export interface StaffSchedule {
   id: string;
@@ -129,5 +147,6 @@ export interface StaffSchedule {
   endTime: string;
   slotDuration: number;
   isActive: boolean;
+  shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL' | null;
   specificDate: string | null;
 }

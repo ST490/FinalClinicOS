@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { prescriptionApi as api } from '../lib/prescriptions';
-import { Plus, Trash2, Clipboard, AlertCircle, Loader2 } from 'lucide-react';
+import { prescriptionApi as api, type Prescription } from '../lib/prescriptions';
+import { getWhitelabel } from '../lib/whitelabel';
+import PrescriptionPrintSheet from '../components/PrescriptionPrintSheet';
+import { Plus, Trash2, Clipboard, AlertCircle, Loader2, Printer } from 'lucide-react';
 
 // Demo drugs for autocomplete
 const DRUG_DATABASE = ['Amoxicillin 500mg', 'Paracetamol 650mg', 'Omeprazole 20mg', 'Metformin 500mg', 'Azithromycin 250mg', 'Ibuprofen 400mg'];
@@ -18,6 +20,30 @@ export default function PrescriptionsPage() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rxs, setRxs] = useState<Prescription[]>([]);
+  const [rxLoading, setRxLoading] = useState(false);
+  const [printRx, setPrintRx] = useState<Prescription | null>(null);
+  const [printing, setPrinting] = useState(false);
+
+  useEffect(() => {
+    if (!clinic) return;
+    setRxLoading(true);
+    api.list({ clinicId: clinic.id, limit: 20 })
+      .then(r => setRxs(r.data))
+      .catch(() => setRxs([]))
+      .finally(() => setRxLoading(false));
+  }, [clinic]);
+
+  const handlePrint = async (id: string) => {
+    setPrinting(true);
+    try {
+      setPrintRx(await api.get(id));
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const wl = clinic ? getWhitelabel(clinic.id) : null;
 
   const handleDrugSearch = (val: string) => {
     setDrugName(val);
@@ -129,6 +155,47 @@ export default function PrescriptionsPage() {
           </div>
         )}
       </div>
+
+      {/* Recent prescriptions — entry point for printing */}
+      <div className="bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-2"><Clipboard className="w-4 h-4 text-primary-600" /> Recent Prescriptions</h3>
+          {rxLoading && <Loader2 className="w-4 h-4 animate-spin text-text-muted" />}
+        </div>
+        {!clinic ? (
+          <p className="text-xs text-text-secondary">Select a clinic first.</p>
+        ) : rxs.length === 0 ? (
+          <p className="text-xs text-text-secondary py-4 text-center">No prescriptions yet for this clinic.</p>
+        ) : (
+          <div className="divide-y divide-border-light">
+            {rxs.map(rx => (
+              <div key={rx.id} className="flex items-center justify-between py-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold truncate">{rx.patient?.name ?? 'Unknown patient'}</p>
+                  <p className="text-[11px] text-text-secondary truncate">
+                    Dr. {rx.doctor?.name ?? '—'} · {new Date(rx.createdAt).toLocaleDateString()} · {rx.status}
+                  </p>
+                </div>
+                <button onClick={() => handlePrint(rx.id)} disabled={printing}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-900 px-3 py-2 rounded-lg disabled:opacity-50">
+                  <Printer className="w-3.5 h-3.5" /> Print
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {printRx && (
+        <PrescriptionPrintSheet
+          prescription={printRx}
+          clinicName={clinic?.name ?? 'Clinic'}
+          logo={wl?.logo}
+          headline={wl?.headline}
+          contact={wl?.contact}
+          onClose={() => setPrintRx(null)}
+        />
+      )}
     </div>
   );
 }

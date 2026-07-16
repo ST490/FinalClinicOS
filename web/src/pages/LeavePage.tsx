@@ -102,7 +102,7 @@ export default function LeavePage() {
     {
       key: 'department', header: 'Department', render: (r) =>
         r.department ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">{r.department}</span>
+          <span className="text-xs bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25">{r.department}</span>
         ) : <span className="text-xs text-text-muted">—</span>,
     },
     { key: 'type', header: 'Type', render: (r) => <span className="text-text-primary">{r.type}</span> },
@@ -139,7 +139,7 @@ export default function LeavePage() {
     {
       key: 'department', header: 'Department', render: (b) =>
         b.department ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">{b.department}</span>
+          <span className="text-xs bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25">{b.department}</span>
         ) : <span className="text-xs text-text-muted">—</span>,
     },
     { key: 'allotted', header: 'Allotted', render: (b) => <span className="text-text-primary">{b.allotted}</span> },
@@ -275,7 +275,7 @@ function ApplyLeaveModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md bg-surface-card border border-border rounded-2xl shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-text-primary mb-4">Apply Leave</h2>
         <form onSubmit={submit} className="space-y-3">

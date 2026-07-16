@@ -43,6 +43,20 @@ export interface ClinicInfo {
   name: string;
   orgId: string;
   roleName: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  timezone?: string | null;
+  currency?: string | null;
+  logoUrl?: string | null;
+  bannerUrl?: string | null;
+  accentColor?: string | null;
+  landingPageSlug?: string | null;
+  status?: string | null;
 }
 
 /**
@@ -97,14 +111,56 @@ export const authApi = {
     return res.data?.data || [];
   },
 
-  createClinic: async (data: { name: string; address?: string; city?: string; country?: string }): Promise<ClinicInfo> => {
+  createClinic: async (data: {
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    postalCode?: string;
+    phone?: string;
+    email?: string;
+    timezone?: string;
+    currency?: string;
+    locale?: string;
+    workingHours?: unknown;
+  }): Promise<ClinicInfo> => {
     const res = await api.post<ClinicInfo>('/clinics', data);
     return res.data;
+  },
+
+  getClinic: async (id: string): Promise<any> => {
+    const res = await api.get<any>(`/clinics/${id}`);
+    return res.data;
+  },
+
+  updateClinic: async (id: string, data: Record<string, unknown>): Promise<void> => {
+    await api.patch(`/clinics/${id}`, data);
+  },
+
+  updateClinicBranding: async (
+    id: string,
+    data: { logoUrl?: string; bannerUrl?: string; accentColor?: string; landingPageSlug?: string },
+  ): Promise<void> => {
+    await api.patch(`/clinics/${id}/branding`, data);
   },
 
   switchClinic: async (clinicId: string | null): Promise<AuthTokens> => {
     const res = await api.post<AuthTokens>('/auth/switch-clinic', { clinicId });
     return res.data;
+  },
+
+  logoutAll: async (): Promise<void> => {
+    await api.post('/auth/logout-all', {});
+  },
+
+  setup2FA: async (): Promise<{ secret: string; qrCodeUrl: string }> => {
+    const res = await api.post<{ secret: string; qrCodeUrl: string }>('/auth/2fa/setup', {});
+    return res.data;
+  },
+
+  verify2FA: async (code: string): Promise<void> => {
+    await api.post('/auth/2fa/verify', { code });
   },
 
   deleteClinic: async (id: string): Promise<void> => {

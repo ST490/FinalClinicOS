@@ -15,12 +15,21 @@ export interface AuthUser {
 export interface AuthClinic {
   id: string;
   name: string;
-  location?: string;
-  branchManager?: string;
-  status?: string;
-  staffCount?: number;
-  patientCount?: number;
   orgId?: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  postalCode?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  timezone?: string | null;
+  currency?: string | null;
+  logoUrl?: string | null;
+  bannerUrl?: string | null;
+  accentColor?: string | null;
+  landingPageSlug?: string | null;
+  status?: string | null;
 }
 
 export interface AuthOrganization {
@@ -106,6 +115,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               id: c.id,
               name: c.name,
               orgId: c.orgId,
+              address: c.address,
+              city: c.city,
+              state: c.state,
+              country: c.country,
+              postalCode: c.postalCode,
+              phone: c.phone,
+              email: c.email,
+              timezone: c.timezone,
+              currency: c.currency,
+              logoUrl: c.logoUrl,
+              bannerUrl: c.bannerUrl,
+              accentColor: c.accentColor,
+              landingPageSlug: c.landingPageSlug,
+              status: c.status,
             }));
             setClinics(mapped);
             setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));

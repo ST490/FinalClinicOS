@@ -3,7 +3,7 @@ import {
   DollarSign, Users, UserCheck, Package, CalendarDays, UserRound,
   FileText, Clock, ListOrdered, HeartPulse, AlertCircle, UserPlus,
   AlertTriangle, ShoppingCart, Receipt, Pill, ClipboardList,
-  ClipboardCheck, CalendarOff,
+  ClipboardCheck, CalendarOff, UserMinus, Briefcase,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -11,7 +11,7 @@ const iconMap: Record<string, LucideIcon> = {
   DollarSign, Users, UserCheck, Package, CalendarDays, UserRound,
   FileText, Clock, ListOrdered, HeartPulse, AlertCircle, UserPlus,
   AlertTriangle, ShoppingCart, Receipt, Pill, ClipboardList,
-  ClipboardCheck, CalendarOff,
+  ClipboardCheck, CalendarOff, UserMinus, Briefcase,
 };
 
 interface StatCardProps {
@@ -21,43 +21,64 @@ interface StatCardProps {
 
 export default function StatCard({ data, index = 0 }: StatCardProps) {
   const Icon = iconMap[data.icon] || Package;
-  const isDanger = data.accent === 'danger';
+  const accent = data.accent ?? 'default';
+
+  // Per-accent styling. Accent rides the icon chip + value color (no side
+  // stripe). danger metrics invert the trend arrow (attrition rising = bad).
+  const styles: Record<string, { title: string; chip: string; icon: string; value: string }> = {
+    default: {
+      title: 'text-text-secondary',
+      chip: 'bg-primary-50 group-hover:bg-primary-100',
+      icon: 'text-primary-600',
+      value: 'text-text-primary',
+    },
+    positive: {
+      title: 'text-success',
+      chip: 'bg-success/10 group-hover:bg-success/15',
+      icon: 'text-success',
+      value: 'text-success',
+    },
+    warning: {
+      title: 'text-warning',
+      chip: 'bg-warning/10 group-hover:bg-warning/15',
+      icon: 'text-warning',
+      value: 'text-text-primary',
+    },
+    danger: {
+      title: 'text-danger',
+      chip: 'bg-danger/10 group-hover:bg-danger/15',
+      icon: 'text-danger',
+      value: 'text-danger',
+    },
+  };
+  const s = styles[accent];
+  const trendGood = accent === 'danger' ? data.trend?.direction === 'down' : data.trend?.direction === 'up';
 
   return (
     <div
-      className={`bg-surface-card rounded-xl border p-5 hover:shadow-[var(--shadow-card-hover)] transition-all duration-300 group ${
-        isDanger ? 'border-danger/30' : 'border-border'
-      }`}
+      className={`bg-surface-card rounded-xl border border-border p-5 hover:shadow-[var(--shadow-card-hover)] transition-all duration-300 group`}
       style={{
         boxShadow: 'var(--shadow-card)',
         animationDelay: `${index * 0.08}s`,
       }}
     >
       <div className="flex items-start justify-between mb-3">
-        <p className={`text-xs font-medium uppercase tracking-wider leading-tight max-w-[70%] ${
-          isDanger ? 'text-danger' : 'text-text-secondary'
-        }`}>
+        <p className={`text-xs font-medium uppercase tracking-wider leading-tight max-w-[70%] ${s.title}`}>
           {data.title}
         </p>
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${
-          isDanger
-            ? 'bg-danger/10 group-hover:bg-danger/15'
-            : 'bg-primary-50 group-hover:bg-primary-100'
-        }`}>
-          <Icon className={`w-4.5 h-4.5 ${isDanger ? 'text-danger' : 'text-primary-600'}`} />
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors ${s.chip}`}>
+          <Icon className={`w-4.5 h-4.5 ${s.icon}`} />
         </div>
       </div>
 
       <div className="flex items-baseline gap-2 mb-1">
-        <span className={`text-2xl font-bold tracking-tight ${
-          isDanger ? 'text-danger' : 'text-text-primary'
-        }`}>
+        <span className={`text-2xl font-bold tracking-tight ${s.value}`}>
           {data.value}
         </span>
         {data.trend && (
           <span
             className={`text-xs font-semibold flex items-center gap-0.5 ${
-              data.trend.direction === 'up' ? 'text-success' : 'text-danger'
+              trendGood ? 'text-success' : 'text-danger'
             }`}
           >
             <span className="text-[10px]">

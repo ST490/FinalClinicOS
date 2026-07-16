@@ -60,7 +60,7 @@ export interface StatCardData {
   };
   subtitle?: string;
   icon: string;
-  accent?: 'default' | 'danger';
+  accent?: 'default' | 'positive' | 'warning' | 'danger';
   breakdown?: { label: string; percentage: number; color: string }[];
 }
 

@@ -180,7 +180,7 @@ export default function AttendancePage() {
       header: 'Department',
       render: (r) =>
         r.department ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">
+          <span className="text-xs bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25">
             {r.department}
           </span>
         ) : (
@@ -220,7 +220,7 @@ export default function AttendancePage() {
       header: 'Department',
       render: (r) =>
         r.department ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">{r.department}</span>
+          <span className="text-xs bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25">{r.department}</span>
         ) : (
           <span className="text-xs text-text-muted">—</span>
         ),

@@ -24,6 +24,7 @@ import type {
   AppointmentStatus,
 } from '../lib/appointments';
 import Badge from '../components/ui/Badge';
+import ModalPortal from '../components/ModalPortal';
 import { useAuth } from '../context/AuthContext';
 import { useRole } from '../context/RoleContext';
 import { appointmentApi } from '../lib/appointments';
@@ -857,8 +858,8 @@ export default function AppointmentsPage() {
 
       {/* Detail / status modal */}
       {selectedApt && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-surface-card rounded-xl border border-border max-w-sm w-full p-6 animate-scale-in space-y-4 shadow-xl">
+        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
+          <div className="bg-surface-card rounded-xl border border-border max-w-sm w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Appointment</h3>
               <button
@@ -956,7 +957,7 @@ export default function AppointmentsPage() {
               </div>
             )}
           </div>
-        </div>
+        </div></ModalPortal>
       )}
     </div>
   );
@@ -1046,8 +1047,8 @@ function BookingModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl">
+    <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
+      <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
         <div className="flex items-center justify-between pb-3 border-b border-border-light">
           <h3 className="text-base font-bold text-text-primary flex items-center gap-2">
             <Stethoscope className="w-4 h-4 text-primary-600" />
@@ -1230,6 +1231,6 @@ function BookingModal({
           </div>
         </form>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

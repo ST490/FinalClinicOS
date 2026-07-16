@@ -9,6 +9,7 @@ import {
   UserPlus, ListOrdered, UserCheck, X, Stethoscope, Truck,
   FolderOpen, ClipboardList, PersonStanding, CalendarCheck, Banknote,
   CalendarOff, Shield, ClipboardCheck, Clock, LogOut,
+  ShieldCheck, Network, UserSearch,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -19,7 +20,7 @@ const iconMap: Record<string, LucideIcon> = {
   FileText, Pill, HeartPulse, Bell, AlertTriangle, ShoppingCart,
   UserPlus, ListOrdered, UserCheck, Truck, FolderOpen, ClipboardList,
   PersonStanding, CalendarCheck, Banknote, CalendarOff, Shield,
-  ClipboardCheck, Clock,
+  ClipboardCheck, Clock, ShieldCheck, Network, UserSearch,
 };
 
 interface SidebarProps {

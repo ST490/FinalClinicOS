@@ -2,12 +2,22 @@ import { useState, useEffect } from 'react';
 import { Palette, Eye, ArrowUpRight, Check, Sparkles, Sliders, Globe, Upload, Image as ImageIcon, Trash2, Plus, Megaphone, Phone, MapPin, Clock, UserRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember } from '../lib/staff';
+import { authApi } from '../lib/auth';
 import {
   emptyConfig, getWhitelabel, saveWhitelabel, readImageAsDataUrl, DEMO_CONFIG,
   type WhitelabelConfig, type WLTheme,
 } from '../lib/whitelabel';
 
 const THEMES: WLTheme[] = ['teal', 'indigo', 'rose', 'emerald'];
+
+// ponytail: map the front-end theme token to the backend accentColor hex so
+// the public landing page (which reads Clinic.accentColor) matches the editor.
+const THEME_HEX: Record<WLTheme, string> = {
+  teal: '#14b8a6',
+  indigo: '#6366f1',
+  rose: '#f43f5e',
+  emerald: '#10b981',
+};
 
 const themeClasses: Record<WLTheme, { text: string; bg: string; bgLight: string; border: string; fill: string }> = {
   teal: { text: 'text-teal-600', bg: 'bg-teal-600 hover:bg-teal-700 text-white', bgLight: 'bg-teal-50 text-teal-700 border-teal-100', border: 'border-teal-500/20', fill: 'bg-teal-600' },
@@ -81,8 +91,19 @@ export default function WhitelabelPage() {
   const removeService = (i: number) =>
     update({ services: config.services.filter((_, idx) => idx !== i) });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     saveWhitelabel(config);
+    // Persist logo/banner/accent to the backend so PublicLandingPage reads a
+    // single source of truth across devices, not just this browser's localStorage.
+    try {
+      await authApi.updateClinicBranding(selectedClinicId, {
+        logoUrl: config.logo,
+        bannerUrl: config.banner,
+        accentColor: THEME_HEX[config.theme],
+      });
+    } catch {
+      // Branding persistence is best-effort; localStorage already saved locally.
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -127,6 +148,12 @@ export default function WhitelabelPage() {
         <div className="xl:col-span-2 bg-surface-card rounded-xl border border-border p-5 shadow-sm space-y-5 max-h-[900px] overflow-y-auto" style={{ boxShadow: 'var(--shadow-card)' }}>
           <div className="flex items-center gap-2 text-xs font-bold text-text-secondary uppercase tracking-wider pb-3 border-b border-border-light">
             <Sliders className="w-4 h-4 text-primary-600" /> Branding Configurator
+          </div>
+
+          {/* Prescription letterhead note — composed from logo + contact below */}
+          <div className="rounded-xl border border-border-light bg-surface p-3 space-y-1">
+            <p className="text-[10px] font-semibold text-text-secondary flex items-center gap-1.5"><UserRound className="w-3.5 h-3.5" /> Prescription Letterhead</p>
+            <p className="text-[10px] text-text-muted leading-relaxed">Printed prescriptions use the <span className="font-semibold">Logo</span> and <span className="font-semibold">Contact &amp; Hours</span> fields below as the letterhead, plus the clinic and prescribing doctor's name. No extra upload needed.</p>
           </div>
 
           {/* Clinic selector */}

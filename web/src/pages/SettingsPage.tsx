@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { authApi, type UserProfile } from '../lib/auth';
 
 export default function SettingsPage() {
-  const { user, clinic, clinics, switchClinic, refreshClinics } = useAuth();
+  const { user, clinics, refreshClinics } = useAuth();
   const { mode, setMode } = useTheme();
 
   const canManageClinics = user?.role === 'MASTER' || user?.role === 'SUB_MASTER';
@@ -16,8 +16,15 @@ export default function SettingsPage() {
   const [addError, setAddError] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  const [form, setForm] = useState({
+    address: '', city: '', state: '', country: '', postalCode: '',
+    phone: '', email: '', timezone: '', currency: '',
+    logoUrl: '', bannerUrl: '', accentColor: '', landingPageSlug: '',
+  });
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+
+  type ClinicForm = typeof form;
 
   const handleAddClinic = async (e: FormEvent) => {
     e.preventDefault();
@@ -36,8 +43,24 @@ export default function SettingsPage() {
   };
 
   const startEdit = (id: string, name: string) => {
+    const c = clinics.find((x) => x.id === id);
     setEditingId(id);
     setEditName(name);
+    setForm({
+      address: c?.address ?? '',
+      city: c?.city ?? '',
+      state: c?.state ?? '',
+      country: c?.country ?? '',
+      postalCode: c?.postalCode ?? '',
+      phone: c?.phone ?? '',
+      email: c?.email ?? '',
+      timezone: c?.timezone ?? '',
+      currency: c?.currency ?? '',
+      logoUrl: c?.logoUrl ?? '',
+      bannerUrl: c?.bannerUrl ?? '',
+      accentColor: c?.accentColor ?? '',
+      landingPageSlug: c?.landingPageSlug ?? '',
+    });
     setEditError('');
   };
 
@@ -46,15 +69,28 @@ export default function SettingsPage() {
     setIsSavingEdit(true);
     setEditError('');
     try {
-      await authApi.updateClinic(id, { name: editName.trim() });
+      await authApi.updateClinic(id, {
+        name: editName.trim(),
+        address: form.address, city: form.city, state: form.state,
+        country: form.country, postalCode: form.postalCode,
+        phone: form.phone, email: form.email,
+        timezone: form.timezone, currency: form.currency,
+      });
+      await authApi.updateClinicBranding(id, {
+        logoUrl: form.logoUrl, bannerUrl: form.bannerUrl,
+        accentColor: form.accentColor, landingPageSlug: form.landingPageSlug,
+      });
       setEditingId(null);
       await refreshClinics();
     } catch (err: any) {
-      setEditError(err?.response?.data?.error?.message || err.message || 'Failed to rename clinic');
+      setEditError(err?.response?.data?.error?.message || err.message || 'Failed to save clinic');
     } finally {
       setIsSavingEdit(false);
     }
   };
+
+  const setField = (key: keyof ClinicForm, value: string) =>
+    setForm((f) => ({ ...f, [key]: value }));
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +162,7 @@ export default function SettingsPage() {
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-text-primary">Settings</h1>
-        <p className="text-sm text-text-secondary mt-1">Manage your profile, security, and active clinic.</p>
+        <p className="text-sm text-text-secondary mt-1">Manage your profile, security, and clinics.</p>
       </div>
 
       {/* Profile */}
@@ -199,29 +235,6 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      {/* Active clinic */}
-      {clinics.length > 0 && (
-        <section className="bg-surface border border-border rounded-xl p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Building2 className="w-5 h-5 text-text-secondary" />
-            <h2 className="text-lg font-semibold text-text-primary">Active clinic</h2>
-          </div>
-          <p className="text-sm text-text-secondary mb-3">Switch which clinic you are currently working in.</p>
-          <select
-            value={clinic?.id ?? ''}
-            onChange={(e) => {
-              const next = clinics.find((c) => c.id === e.target.value) ?? null;
-              switchClinic(next);
-            }}
-            className="w-full sm:w-80 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary"
-          >
-            {clinics.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </section>
-      )}
-
       {/* Clinics — MASTER + branch manager only (create/update, no delete) */}
       {canManageClinics && (
         <section className="bg-surface border border-border rounded-xl p-6">
@@ -229,47 +242,96 @@ export default function SettingsPage() {
             <Building2 className="w-5 h-5 text-text-secondary" />
             <h2 className="text-lg font-semibold text-text-primary">Clinics</h2>
           </div>
-          <p className="text-sm text-text-secondary mb-4">Add a clinic or rename an existing one.</p>
+          <p className="text-sm text-text-secondary mb-4">Add a clinic and manage its location, contact, and branding.</p>
 
-          <ul className="space-y-2 mb-4">
+          <div className="space-y-3 mb-4">
             {clinics.map((c) => (
-              <li key={c.id} className="flex items-center gap-2">
-                {editingId === c.id ? (
-                  <>
-                    <input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary"
-                    />
-                    <button
-                      onClick={() => handleSaveEdit(c.id)}
-                      disabled={isSavingEdit}
-                      className="px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium disabled:opacity-50"
-                    >
-                      {isSavingEdit ? 'Saving…' : 'Save'}
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      className="px-3 py-2 rounded-lg border border-border text-sm text-text-primary hover:bg-surface"
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex-1 text-sm text-text-primary">{c.name}</span>
-                    <button
-                      onClick={() => startEdit(c.id, c.name)}
-                      className="px-3 py-2 rounded-lg border border-border text-sm text-text-primary hover:bg-surface"
-                    >
-                      Rename
-                    </button>
-                  </>
+              <div key={c.id} className="border border-border rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <span className="flex-1 text-sm font-medium text-text-primary">{c.name}</span>
+                  {c.status && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-surface text-text-muted">
+                      {c.status}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => (editingId === c.id ? setEditingId(null) : startEdit(c.id, c.name))}
+                    className="px-3 py-2 rounded-lg border border-border text-sm text-text-primary hover:bg-surface"
+                  >
+                    {editingId === c.id ? 'Close' : 'Edit'}
+                  </button>
+                </div>
+
+                {editingId === c.id && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Name</label>
+                      <input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-border bg-surface text-sm text-text-primary"
+                      />
+                    </div>
+
+                    <fieldset className="border border-border rounded-lg p-3">
+                      <legend className="text-xs font-medium text-text-secondary px-1">Location</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input placeholder="Address" value={form.address} onChange={(e) => setField('address', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="City" value={form.city} onChange={(e) => setField('city', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="State" value={form.state} onChange={(e) => setField('state', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Country" value={form.country} onChange={(e) => setField('country', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Postal code" value={form.postalCode} onChange={(e) => setField('postalCode', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="border border-border rounded-lg p-3">
+                      <legend className="text-xs font-medium text-text-secondary px-1">Contact</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input placeholder="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Email" type="email" value={form.email} onChange={(e) => setField('email', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="border border-border rounded-lg p-3">
+                      <legend className="text-xs font-medium text-text-secondary px-1">Locale</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input placeholder="Timezone (e.g. Asia/Kolkata)" value={form.timezone} onChange={(e) => setField('timezone', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Currency (e.g. INR)" value={form.currency} onChange={(e) => setField('currency', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                      </div>
+                    </fieldset>
+
+                    <fieldset className="border border-border rounded-lg p-3">
+                      <legend className="text-xs font-medium text-text-secondary px-1">Branding</legend>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <input placeholder="Logo URL" value={form.logoUrl} onChange={(e) => setField('logoUrl', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Banner URL" value={form.bannerUrl} onChange={(e) => setField('bannerUrl', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Accent color (e.g. #2563eb)" value={form.accentColor} onChange={(e) => setField('accentColor', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                        <input placeholder="Landing slug (a-z0-9-)" value={form.landingPageSlug} onChange={(e) => setField('landingPageSlug', e.target.value)} className="px-3 py-2 rounded-lg border border-border bg-surface text-sm" />
+                      </div>
+                    </fieldset>
+
+                    {editError && <p className="text-sm text-red-600">{editError}</p>}
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleSaveEdit(c.id)}
+                        disabled={isSavingEdit}
+                        className="px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium disabled:opacity-50"
+                      >
+                        {isSavingEdit ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingId(null)}
+                        className="px-3 py-2 rounded-lg border border-border text-sm text-text-primary hover:bg-surface"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </li>
+              </div>
             ))}
-          </ul>
-          {editError && <p className="text-sm text-red-600 mb-3">{editError}</p>}
+          </div>
 
           <form onSubmit={handleAddClinic} className="flex items-center gap-2">
             <input

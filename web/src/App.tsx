@@ -1,9 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { RoleProvider } from './context/RoleContext';
+import { ThemeProvider } from './context/ThemeContext';
 import DashboardLayout from './components/layout/DashboardLayout';
 import DashboardPage from './pages/DashboardPage';
 import PlaceholderPage from './pages/PlaceholderPage';
+import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import SignupPage from './pages/SignupPage';
 import AppointmentsPage from './pages/AppointmentsPage';
@@ -21,6 +23,13 @@ import LeavePage from './pages/LeavePage';
 import StaffDirectoryPage from './pages/StaffDirectoryPage';
 import PayrollPage from './pages/PayrollPage';
 import SchedulingPage from './pages/SchedulingPage';
+import OnboardingPage from './pages/OnboardingPage';
+import RoleAssignmentsPage from './pages/RoleAssignmentsPage';
+import HrReportsPage from './pages/HrReportsPage';
+import CredentialsPage from './pages/CredentialsPage';
+import MyHrPage from './pages/MyHrPage';
+import EmployeeProfilePage from './pages/EmployeeProfilePage';
+import OrgChartPage from './pages/OrgChartPage';
 import { useAuth } from './context/AuthContext';
 import DemoSwitcher from './components/ui/DemoSwitcher';
 import AcceptInvitePage from './pages/AcceptInvitePage';
@@ -40,12 +49,11 @@ function AuthenticatedApp() {
       <Route element={isAuthenticated ? <DashboardLayout /> : <Navigate to="/login" replace />}>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/analytics" element={<PlaceholderPage />} />
-        <Route path="/clinics" element={<PlaceholderPage />} />
         <Route path="/billing" element={<DuesPage />} />
         <Route path="/staff" element={<StaffPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
         <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/settings" element={<PlaceholderPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/patients" element={<PatientsPage />} />
         <Route path="/appointments" element={<AppointmentsPage />} />
         <Route path="/whitelabel" element={<WhitelabelPage />} />
@@ -69,8 +77,13 @@ function AuthenticatedApp() {
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/payroll" element={<PayrollPage />} />
         <Route path="/leave-requests" element={<LeavePage />} />
-        <Route path="/onboarding" element={<PlaceholderPage />} />
-        <Route path="/role-assignments" element={<PlaceholderPage />} />
+        <Route path="/onboarding" element={<OnboardingPage />} />
+        <Route path="/role-assignments" element={<RoleAssignmentsPage />} />
+        <Route path="/hr-reports" element={<HrReportsPage />} />
+        <Route path="/credentials" element={<CredentialsPage />} />
+        <Route path="/my-hr" element={<MyHrPage />} />
+        <Route path="/employee/:userId" element={<EmployeeProfilePage />} />
+        <Route path="/org-chart" element={<OrgChartPage />} />
         <Route path="*" element={<PlaceholderPage />} />
       </Route>
     </Routes>
@@ -79,13 +92,15 @@ function AuthenticatedApp() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <RoleProvider>
-          <AuthenticatedApp />
-          {SHOW_DEMO_SWITCHER && <DemoSwitcher />}
-        </RoleProvider>
-      </BrowserRouter>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <RoleProvider>
+            <AuthenticatedApp />
+            {SHOW_DEMO_SWITCHER && <DemoSwitcher />}
+          </RoleProvider>
+        </BrowserRouter>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

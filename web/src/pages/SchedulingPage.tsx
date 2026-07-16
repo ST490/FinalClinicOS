@@ -213,8 +213,8 @@ export default function SchedulingPage() {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setEditing(null)}>
-          <div className="w-full max-w-sm bg-surface-card border border-border rounded-2xl shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-12 px-4 pb-12 overflow-y-auto" onClick={() => setEditing(null)}>
+          <div className="w-full max-w-sm bg-surface-card border border-border rounded-2xl shadow-xl p-5 shrink-0" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-text-primary mb-1">
               {DAYS[editing.dayOfWeek]} shift
             </h2>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { staffApi, type StaffMember } from '../lib/staff';
+import { staffApi, sortOffboardedLast, type StaffMember } from '../lib/staff';
 import { DEFAULT_DEPARTMENTS } from '../lib/constants';
 import {
   Users, Search, Loader2, Mail, Phone, AlertTriangle, Crown, Star,
@@ -43,6 +43,14 @@ function initials(name: string): string {
   return name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
+function ageFromDob(dob?: string | null): number | null {
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (isNaN(d.getTime())) return null;
+  const age = Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 3600 * 1000));
+  return age >= 0 && age < 200 ? age : null;
+}
+
 export default function StaffDirectoryPage() {
   const { clinic } = useAuth();
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -53,6 +61,7 @@ export default function StaffDirectoryPage() {
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
+  const [sortBy, setSortBy] = useState<'type' | 'dateEnrolled' | 'age' | 'name'>('name');
 
   // Resolve the role/department/status for the current clinic context.
   const primaryRoleFor = (m: StaffMember) => {
@@ -61,15 +70,13 @@ export default function StaffDirectoryPage() {
   };
 
   const loadData = async () => {
-    if (!clinic?.id) {
-      setStaff([]);
-      return;
-    }
     setLoading(true);
     setError('');
     try {
-      const list = await staffApi.list({ clinicId: clinic.id });
-      setStaff(list);
+      const list = await staffApi.list({
+        ...(clinic?.id ? { clinicId: clinic.id } : {}),
+      });
+      setStaff(sortOffboardedLast(list, clinic?.id));
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || err.message || 'Failed to fetch staff directory.');
     } finally {
@@ -92,9 +99,22 @@ export default function StaffDirectoryPage() {
     return Array.from(new Set([...DEFAULT_DEPARTMENTS, ...fromData]));
   }, [staff]);
 
+  // Role filter: one option per main role, plus a single "Support Staff" option.
+  // Support staff are filtered together here; their department is handled by the Department filter.
+  const roleOptions = useMemo(() => {
+    return Array.from(new Set(
+      staff.map((m) => primaryRoleFor(m)?.role).filter(Boolean) as string[],
+    )).filter((r) => r !== 'SUPPORT');
+  }, [staff]);
+
+  const hasSupport = useMemo(
+    () => staff.some((m) => primaryRoleFor(m)?.role === 'SUPPORT'),
+    [staff],
+  );
+
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return staff.filter((m) => {
+    const rows = staff.filter((m) => {
       const role = primaryRoleFor(m);
       if (roleFilter !== 'ALL' && role?.role !== roleFilter) return false;
       if (departmentFilter !== 'ALL' && (role?.department ?? '') !== departmentFilter) return false;
@@ -102,7 +122,34 @@ export default function StaffDirectoryPage() {
       if (q && !`${m.name} ${m.email ?? ''} ${m.phone ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [staff, searchQuery, roleFilter, departmentFilter, statusFilter]);
+
+    const sorted = [...rows];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'type': {
+          const ra = primaryRoleFor(a)?.role ?? '';
+          const rb = primaryRoleFor(b)?.role ?? '';
+          return ra.localeCompare(rb) || a.name.localeCompare(b.name);
+        }
+        case 'dateEnrolled': {
+          const da = primaryRoleFor(a)?.joiningDate ? new Date(primaryRoleFor(a)!.joiningDate!).getTime() : Infinity;
+          const db = primaryRoleFor(b)?.joiningDate ? new Date(primaryRoleFor(b)!.joiningDate!).getTime() : Infinity;
+          return da - db || a.name.localeCompare(b.name);
+        }
+        case 'age': {
+          const aa = ageFromDob(a.dateOfBirth);
+          const ab = ageFromDob(b.dateOfBirth);
+          if (aa == null && ab == null) return a.name.localeCompare(b.name);
+          if (aa == null) return 1;
+          if (ab == null) return -1;
+          return aa - ab || a.name.localeCompare(b.name);
+        }
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+    return sorted;
+  }, [staff, searchQuery, roleFilter, departmentFilter, statusFilter, sortBy]);
 
   const columns: Column<StaffMember>[] = [
     {
@@ -132,20 +179,17 @@ export default function StaffDirectoryPage() {
       header: 'Role',
       render: (m) => {
         const role = primaryRoleFor(m);
-        return role ? <Badge variant={ROLE_COLORS[role.role] ?? 'neutral'}>{ROLE_LABELS[role.role] ?? role.role}</Badge> : <span className="text-xs text-text-muted">—</span>;
-      },
-    },
-    {
-      key: 'department',
-      header: 'Department',
-      render: (m) => {
-        const dept = primaryRoleFor(m)?.department;
-        return dept ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">
-            {dept}
-          </span>
-        ) : (
-          <span className="text-xs text-text-muted">—</span>
+        if (!role) return <span className="text-xs text-text-muted">—</span>;
+        const isSupport = role.role === 'SUPPORT';
+        // Support staff are represented by their department, not a "Support Staff" role.
+        const roleLabel = isSupport ? (role.department || '—') : (ROLE_LABELS[role.role] ?? role.role);
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge variant={ROLE_COLORS[role.role] ?? 'neutral'}>{roleLabel}</Badge>
+            {!isSupport && role.department && (
+              <span className="text-[10px] leading-tight text-text-muted">· {role.department}</span>
+            )}
+          </div>
         );
       },
     },
@@ -153,6 +197,14 @@ export default function StaffDirectoryPage() {
       key: 'status',
       header: 'Status',
       render: (m) => <Badge variant={STATUS_COLORS[m.status] ?? 'neutral'}>{m.status}</Badge>,
+    },
+    {
+      key: 'branch',
+      header: 'Branch',
+      render: (m) => {
+        const role = primaryRoleFor(m);
+        return <span className="text-xs text-text-secondary">{role?.clinicName || '—'}</span>;
+      },
     },
     {
       key: 'contact',
@@ -170,11 +222,6 @@ export default function StaffDirectoryPage() {
       ),
     },
   ];
-
-  const roleOptions = useMemo(() => {
-    const present = Array.from(new Set(staff.map((m) => primaryRoleFor(m)?.role).filter(Boolean) as string[]));
-    return present;
-  }, [staff]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -219,6 +266,7 @@ export default function StaffDirectoryPage() {
             {roleOptions.map((r) => (
               <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>
             ))}
+            {hasSupport && <option value="SUPPORT">Support Staff</option>}
           </select>
         </div>
         <div>
@@ -245,6 +293,19 @@ export default function StaffDirectoryPage() {
             <option value="ACTIVE">Active</option>
             <option value="DISABLED">Disabled</option>
             <option value="PENDING">Pending</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Sort by</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            className="text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10"
+          >
+            <option value="name">Name (A–Z)</option>
+            <option value="type">Type</option>
+            <option value="dateEnrolled">Date Enrolled</option>
+            <option value="age">Age</option>
           </select>
         </div>
       </div>

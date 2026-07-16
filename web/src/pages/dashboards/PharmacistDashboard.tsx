@@ -191,14 +191,15 @@ export default function PharmacistDashboard() {
               <p className="text-xs text-text-muted italic py-4 text-center">No alerts or notifications</p>
             ) : (
               displayNotifications.map((notif) => {
-                const borderColor = {
-                  danger: 'border-l-danger bg-red-50/50',
-                  warning: 'border-l-warning bg-amber-50/50',
-                  info: 'border-l-info bg-blue-50/50',
+                const tone = {
+                  danger: { dot: 'bg-danger', bg: 'bg-danger/10' },
+                  warning: { dot: 'bg-warning', bg: 'bg-warning/10' },
+                  info: { dot: 'bg-info', bg: 'bg-info/10' },
                 }[notif.type];
 
                 return (
-                  <div key={notif.id} className={`p-3 rounded-lg border-l-3 ${borderColor} border border-border-light`}>
+                  <div key={notif.id} className={`p-3 rounded-lg border border-border-light flex items-start gap-2.5 ${tone.bg}`}>
+                    <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${tone.dot}`} />
                     <p className="text-xs text-text-primary leading-relaxed">{notif.text}</p>
                   </div>
                 );

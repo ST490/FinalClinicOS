@@ -107,6 +107,8 @@ export default function PayrollPage() {
       Basic: p.basic,
       Bonus: p.bonus,
       Deduction: p.deduction,
+      'OT Hours': p.overtimeHours ?? 0,
+      'OT Pay': p.overtimePay ?? 0,
       Net: p.net,
       Status: p.status,
     }));
@@ -121,7 +123,9 @@ export default function PayrollPage() {
   const summary = useMemo(() => {
     const total = payslips.reduce((s, p) => s + p.net, 0);
     const paid = payslips.filter((p) => p.status === 'PAID').reduce((s, p) => s + p.net, 0);
-    return { count: payslips.length, total, paid };
+    const otPay = payslips.reduce((s, p) => s + (p.overtimePay || 0), 0);
+    const otHours = payslips.reduce((s, p) => s + (p.overtimeHours || 0), 0);
+    return { count: payslips.length, total, paid, otPay, otHours };
   }, [payslips]);
 
   const columns: Column<Payslip>[] = [
@@ -135,7 +139,7 @@ export default function PayrollPage() {
       header: 'Department',
       render: (p) =>
         p.department ? (
-          <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200">{p.department}</span>
+          <span className="text-xs bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25">{p.department}</span>
         ) : (
           <span className="text-xs text-text-muted">—</span>
         ),
@@ -159,6 +163,16 @@ export default function PayrollPage() {
           {p.deduction ? ` −${fmtMoney(p.deduction)}` : ''}
         </span>
       ),
+    },
+    {
+      key: 'overtime',
+      header: 'Overtime',
+      render: (p) =>
+        p.overtimeHours ? (
+          <span className="text-xs text-text-secondary">{p.overtimeHours}h · {fmtMoney(p.overtimePay || 0)}</span>
+        ) : (
+          <span className="text-xs text-text-muted">—</span>
+        ),
     },
     {
       key: 'net',
@@ -272,7 +286,8 @@ export default function PayrollPage() {
         <div className="ml-auto text-sm text-text-secondary">
           <span className="font-semibold text-text-primary">{summary.count}</span> payslips ·{' '}
           <span className="font-semibold text-text-primary">{fmtMoney(summary.total)}</span> total ·{' '}
-          <span className="font-semibold text-emerald-600">{fmtMoney(summary.paid)}</span> paid
+          <span className="font-semibold text-emerald-600">{fmtMoney(summary.paid)}</span> paid ·{' '}
+          <span className="font-semibold text-text-primary">{summary.otHours}h</span> OT ({fmtMoney(summary.otPay)})
         </div>
       </div>
 
