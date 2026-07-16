@@ -128,10 +128,10 @@ export class AttendanceService {
       const isPresent = r.status === 'PRESENT' || r.status === 'LATE' || r.status === 'HALF_DAY';
       if (isPresent) bucket.present++;
       if (r.status === 'PRESENT' || r.status === 'LATE') present++;
-      else if (r.status === 'ABSENT') absent++;
-      else if (r.status === 'LATE') late++;
-      else if (r.status === 'HALF_DAY') halfDay++;
-      else if (r.status === 'LEAVE') leave++;
+      if (r.status === 'LATE') late++;
+      if (r.status === 'ABSENT') absent++;
+      if (r.status === 'HALF_DAY') halfDay++;
+      if (r.status === 'LEAVE') leave++;
       byDayMap.set(day, bucket);
     }
 
