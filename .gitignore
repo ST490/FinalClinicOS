@@ -2,3 +2,11 @@ node_modules/
 .env
 dist/
 .claude/
+
+# throwaway connection tests (may contain secrets) — never commit
+scripts/_conn-tests/
+
+# local logs / junk
+*.log
+nul
+procs.txt

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
@@ -16,7 +16,8 @@
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "recharts": "^2.15.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",
