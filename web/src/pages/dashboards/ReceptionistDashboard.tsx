@@ -6,14 +6,15 @@ import { useAuth } from '../../context/AuthContext';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { appointmentApi } from '../../lib/appointments';
 import { billingApi } from '../../lib/billing';
+import { reportsApi, last30Days } from '../../lib/reports';
 
 const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
 
 const statusColors: Record<string, string> = {
-  Arrived: 'bg-emerald-100 border-emerald-300 text-emerald-800',
-  Confirmed: 'bg-primary-100 border-primary-300 text-primary-800',
-  'In Progress': 'bg-amber-100 border-amber-300 text-amber-800',
-  Waiting: 'bg-yellow-100 border-yellow-300 text-yellow-800',
+  Arrived: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300',
+  Confirmed: 'bg-primary-500/15 border-primary-500/30 text-primary-700 dark:text-primary-400',
+  'In Progress': 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300',
+  Waiting: 'bg-yellow-500/15 border-yellow-500/30 text-yellow-700 dark:text-yellow-300',
 };
 
 export default function ReceptionistDashboard() {
@@ -42,6 +43,11 @@ export default function ReceptionistDashboard() {
     () => billingApi.list({ clinicId: clinic?.id, limit: 10 }),
     { skip: !clinic?.id }
   );
+
+  // Fetch reports (last 30 days)
+  const win = last30Days();
+  const { data: revenue } = useApiQuery(() => reportsApi.revenue(clinic?.id as string, win), { skip: !clinic?.id });
+  const { data: patients } = useApiQuery(() => reportsApi.patients(clinic?.id as string, win), { skip: !clinic?.id });
 
   const displayAppointments = (appointmentsData?.data || []).reduce<Record<string, any[]>>((acc, apt) => {
     const columnName = apt.doctor?.name || 'General Consultation';
@@ -97,7 +103,7 @@ export default function ReceptionistDashboard() {
       return { ...s, value: String(expectedCount) };
     }
     if (s.id === 'stat-4') {
-      return { ...s, value: '$0' };
+      return { ...s, value: revenue ? `₹${Math.round(Number(revenue.collectedAmount || 0)).toLocaleString('en-IN')}` : '$0', subtitle: 'collected (30d)' };
     }
     return s;
   });
@@ -127,6 +133,17 @@ export default function ReceptionistDashboard() {
         {displayStats.map((stat, i) => (
           <StatCard key={stat.id} data={stat} index={i} />
         ))}
+      </div>
+
+      {/* Reports (last 30 days) */}
+      <div className="bg-surface-card rounded-xl border border-border p-5" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Reports (last 30 days)</h3>
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <StatCard data={{ id: 'r-new', title: 'New Patients', value: String(patients?.newPatients ?? 0), icon: 'UserPlus' }} />
+          <StatCard data={{ id: 'r-ret', title: 'Returning', value: String(patients?.returningPatients ?? 0), icon: 'UserCheck' }} />
+          <StatCard data={{ id: 'r-vis', title: 'Total Visits', value: String(patients?.totalVisits ?? 0), icon: 'CalendarDays' }} />
+          <StatCard data={{ id: 'r-rev', title: 'Revenue (collected)', value: revenue ? `₹${Math.round(Number(revenue.collectedAmount || 0)).toLocaleString('en-IN')}` : '$0', icon: 'DollarSign' }} />
+        </div>
       </div>
 
       {/* Daily Appointment Calendar View */}
@@ -170,7 +187,7 @@ export default function ReceptionistDashboard() {
                         appointments.map((apt) => (
                           <div
                             key={apt.id}
-                            className={`p-2 rounded-lg border text-xs mb-1 ${statusColors[apt.status] || 'bg-slate-50 border-slate-200'}`}
+                            className={`p-2 rounded-lg border text-xs mb-1 ${statusColors[apt.status] || 'bg-surface-card border-border'}`}
                           >
                             <div className="flex items-center justify-between">
                               <span className="font-semibold">{apt.patientName}</span>

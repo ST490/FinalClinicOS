@@ -6,6 +6,7 @@ import { Calendar, Search } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { appointmentApi } from '../../lib/appointments';
+import { reportsApi, last30Days } from '../../lib/reports';
 
 export default function DoctorDashboard() {
   const { clinic, user } = useAuth();
@@ -30,6 +31,10 @@ export default function DoctorDashboard() {
     { skip: !clinic?.id || !user?.id },
   );
 
+  // Patients report — last 30 days
+  const win = last30Days();
+  const { data: patients } = useApiQuery(() => reportsApi.patients(clinic?.id as string, win), { skip: !clinic?.id });
+
   const displayStats = statsByRole.DOCTOR.map((s) => {
     if (s.id === 'stat-1') {
       const todayCount = (appointmentsData?.data || []).length;
@@ -47,7 +52,7 @@ export default function DoctorDashboard() {
     }
     if (s.id === 'stat-4') {
       // Active/Prescriptions
-      return { ...s, value: '0' };
+      return { ...s, value: String(patients?.totalVisits ?? 0), subtitle: 'visits (30d)' };
     }
     return s;
   });
@@ -83,6 +88,25 @@ export default function DoctorDashboard() {
         {displayStats.map((stat, i) => (
           <StatCard key={stat.id} data={stat} index={i} />
         ))}
+      </div>
+
+      {/* Patients (last 30 days) */}
+      <div className="bg-surface-card rounded-xl border border-border p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+        <h3 className="text-sm font-semibold text-text-primary mb-3">Patients (last 30 days)</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <div className="text-xs text-text-secondary">New</div>
+            <div className="text-lg font-bold text-text-primary">{patients?.newPatients ?? 0}</div>
+          </div>
+          <div>
+            <div className="text-xs text-text-secondary">Returning</div>
+            <div className="text-lg font-bold text-text-primary">{patients?.returningPatients ?? 0}</div>
+          </div>
+          <div>
+            <div className="text-xs text-text-secondary">Total Visits</div>
+            <div className="text-lg font-bold text-text-primary">{patients?.totalVisits ?? 0}</div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">

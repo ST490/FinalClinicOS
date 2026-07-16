@@ -90,7 +90,9 @@ export async function getRevenueReport(clinicId: string, fromDate: Date, toDate:
     totalRevenue: totalRevenue.toFixed(2),
     totalDues: totalDues.toFixed(2),
     collectedAmount: collectedAmount.toFixed(2),
-    waivedAmount: dues.filter(d => d.status === 'WAIVED').reduce((sum, d) => sum + Number(d.totalAmount), 0).toFixed(2),
+    // ponytail: waived amount is the forgiven portion (billed minus what was paid),
+    // not the full billed total.
+    waivedAmount: dues.filter(d => d.status === 'WAIVED').reduce((sum, d) => sum + (Number(d.totalAmount) - Number(d.amountPaid)), 0).toFixed(2),
     byPaymentMethod,
     byDay,
   };
@@ -102,16 +104,25 @@ export async function getPatientReport(clinicId: string, fromDate: Date, toDate:
     select: { visitDate: true, patientId: true },
   });
 
-  // Count unique patients, group by patient
-  const firstVisits = await prisma.patientVisit.groupBy({
-    by: ['patientId'],
-    _count: true,
-    where: { clinicId, visitDate: { gte: fromDate, lte: toDate } },
-  });
+  // A patient is "new" only if their first-ever visit falls in the window —
+  // not merely someone with a single visit inside it.
+  const patientIds = Array.from(new Set(visits.map(v => v.patientId)));
+  const earlierVisits = patientIds.length
+    ? await prisma.patientVisit.findMany({
+        where: {
+          clinicId,
+          patientId: { in: patientIds },
+          visitDate: { lt: fromDate },
+        },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      })
+    : [];
+  const returningIds = new Set(earlierVisits.map(v => v.patientId));
 
   const totalVisits = visits.length;
-  const newPatients = firstVisits.filter(f => f._count === 1).length;
-  const returningPatients = totalVisits - newPatients;
+  const newPatients = patientIds.filter(id => !returningIds.has(id)).length;
+  const returningPatients = patientIds.length - newPatients;
 
   // Group by day
   const byDayMap = new Map<string, number>();

@@ -1,11 +1,13 @@
 import { statsByRole } from '../../lib/constants';
 import StatCard from '../../components/ui/StatCard';
+import EmptyState from '../../components/ui/EmptyState';
 import Badge from '../../components/ui/Badge';
-import { AlertTriangle, Filter } from 'lucide-react';
+import { AlertTriangle, Filter, FileText, Package } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { inventoryApi } from '../../lib/inventory';
 import { prescriptionApi } from '../../lib/prescriptions';
+import { reportsApi } from '../../lib/reports';
 
 export default function PharmacistDashboard() {
   const { clinic } = useAuth();
@@ -19,6 +21,12 @@ export default function PharmacistDashboard() {
   // Fetch awaiting prescriptions
   const { data: prescriptionsData } = useApiQuery(
     () => prescriptionApi.list({ clinicId: clinic?.id, limit: 100 }),
+    { skip: !clinic?.id }
+  );
+
+  // Fetch backend inventory report
+  const { data: invReport } = useApiQuery(
+    () => reportsApi.inventory(clinic?.id as string),
     { skip: !clinic?.id }
   );
 
@@ -62,16 +70,17 @@ export default function PharmacistDashboard() {
 
   const displayStats = statsByRole.PHARMACIST.map((s) => {
     if (s.id === 'stat-1') {
-      return { ...s, value: String(displayInventory.length), trend: undefined };
+      return { ...s, value: String(invReport?.totalItems ?? displayInventory.length), trend: undefined };
     }
     if (s.id === 'stat-2') {
-      return { ...s, value: `${lowStockCount} Items`, subtitle: lowStockCount > 0 ? 'Action required' : 'Inventory normal' };
+      const lowStock = invReport?.lowStockItems ?? lowStockCount;
+      return { ...s, value: `${lowStock} Items`, subtitle: lowStock > 0 ? 'Action required' : 'Inventory normal' };
     }
     if (s.id === 'stat-3') {
-      return { ...s, value: `${expiringCount} Items`, subtitle: 'within 30 days' };
+      return { ...s, value: `${invReport?.expiringItems ?? expiringCount} Items`, subtitle: 'within 30 days' };
     }
     if (s.id === 'stat-4') {
-      return { ...s, value: '0' };
+      return { ...s, value: String(invReport?.outOfStock ?? 0) };
     }
     return s;
   });
@@ -217,11 +226,7 @@ export default function PharmacistDashboard() {
               </thead>
               <tbody className="divide-y divide-border-light">
                 {displayPrescriptions.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-5 py-8 text-center text-xs text-text-muted italic">
-                      No prescriptions awaiting dispensing
-                    </td>
-                  </tr>
+                  <EmptyState icon={FileText} message="No prescriptions awaiting dispensing" colSpan={3} />
                 ) : (
                   displayPrescriptions.map((rx) => (
                     <tr key={rx.id} className="hover:bg-surface/50 transition-colors">
@@ -256,11 +261,7 @@ export default function PharmacistDashboard() {
               </thead>
               <tbody className="divide-y divide-border-light">
                 {displayDeliveries.length === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-5 py-8 text-center text-xs text-text-muted italic">
-                      No recent incoming deliveries
-                    </td>
-                  </tr>
+                  <EmptyState icon={Package} message="No recent incoming deliveries" colSpan={3} />
                 ) : (
                   displayDeliveries.map((del) => {
                     const statusVariant = ({

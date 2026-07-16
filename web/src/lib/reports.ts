@@ -1,5 +1,12 @@
 import api from './api';
 
+// ponytail: shared 30-day window so every dashboard hits the same report range.
+export const last30Days = () => {
+  const to = new Date();
+  const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  return { fromDate: from.toISOString().slice(0, 10), toDate: to.toISOString().slice(0, 10) };
+};
+
 export interface RevenueReport {
   totalRevenue: string;
   totalDues: string;

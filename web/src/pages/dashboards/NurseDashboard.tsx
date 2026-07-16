@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { appointmentApi } from '../../lib/appointments';
 import { prescriptionApi } from '../../lib/prescriptions';
+import { reportsApi, last30Days } from '../../lib/reports';
 
 export default function NurseDashboard() {
   const { clinic } = useAuth();
@@ -33,6 +34,10 @@ export default function NurseDashboard() {
     () => prescriptionApi.list({ clinicId: clinic?.id, limit: 5 }),
     { skip: !clinic?.id }
   );
+
+  // Fetch patients report (last 30 days)
+  const win = last30Days();
+  const { data: patients } = useApiQuery(() => reportsApi.patients(clinic?.id as string, win), { skip: !clinic?.id });
 
   const displayAppointments = (appointmentsData?.data || []).map((apt) => {
     const timeStr = new Date(apt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -227,6 +232,25 @@ export default function NurseDashboard() {
                   </div>
                 ))
               )}
+            </div>
+          </div>
+
+          {/* Patient Activity (last 30 days) */}
+          <div className="bg-surface-card rounded-xl border border-border p-4" style={{ boxShadow: 'var(--shadow-card)' }}>
+            <h3 className="text-sm font-semibold text-text-primary mb-3">Patient Activity (last 30 days)</h3>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-lg font-bold text-text-primary">{patients?.newPatients ?? 0}</p>
+                <p className="text-[10px] text-text-muted">New Patients</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold text-text-primary">{patients?.returningPatients ?? 0}</p>
+                <p className="text-[10px] text-text-muted">Returning</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold text-text-primary">{patients?.totalVisits ?? 0}</p>
+                <p className="text-[10px] text-text-muted">Total Visits</p>
+              </div>
             </div>
           </div>
         </div>
