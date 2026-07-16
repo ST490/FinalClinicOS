@@ -177,6 +177,31 @@ upgrading toolchains.
   fixed by using independent `if`s. `npx tsc --noEmit` is clean (exit 0).
 - Node 26.5.0 is what Render picks (>=20 satisfied). No action needed.
 
+### Migrations (Supabase Postgres) — IMPORTANT
+- Two migrations were DISABLED (moved out of `prisma/migrations/` to repo-root
+  `prisma_pending_backup/`): `20260716000000_rls_tenant_isolation` and
+  `20260717000000_unique_doctor_slot_active`. Reasons:
+  - The RLS migration dates `20260716` but sorts before the `20260705` init
+    when Prisma applies unapplied migrations, so it ran `ALTER TABLE patients
+    ENABLE ROW LEVEL SECURITY` BEFORE `patients` existed → P3018. It also
+    CREATEs DB ROLES (`careme_app`/`careme_bypass`, `CHANGE_ME` pw) which
+    assume a non-superuser connection (Supabase `postgres` is superuser → RLS
+    bypassed anyway). Both are blueprint PENDING items (§14, §13), not
+    login blockers.
+  - A half-applied init left `patients` missing + orphan `patient_visits` rows
+    → `db push` then failed on FK violation. Resolved by
+    `prisma migrate reset --force --skip-seed --skip-generate` (clean slate,
+    re-applied the 2 good migrations: init + appointment_category). Safe
+    because the DB had no real data yet.
+- To run migrations: `npx prisma migrate deploy` (local, uses verified
+  `.env` URLs). Pre-Deploy on Render is paid-only, so do it manually.
+- `prisma db push` is the fallback when `migrate` is blocked (Windows EPERM /
+  history drift) — it syncs schema without migration history. Prefer
+  `migrate deploy` for reproducible history.
+- Re-enable the disabled migrations ONLY after re-dating them to sort AFTER
+  `20260715120000` AND deciding the role/password strategy. Don't just drop
+  them back in — they'll re-trigger P3018.
+
 ### Live URLs (2026-07-16)
 - Frontend: https://careme-snowy.vercel.app
 - Backend:  https://careme-smzs.onrender.com
