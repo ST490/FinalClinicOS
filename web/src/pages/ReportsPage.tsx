@@ -9,7 +9,7 @@ import {
 import { useApiQuery } from '../lib/useApiQuery';
 import { staffApi } from '../lib/staff';
 import { reportsApi } from '../lib/reports';
-import { LineChartCard, BarChartCard, PieChartCard } from '../components/charts/Charts';
+import { BarChartCard, PieChartCard } from '../components/charts/Charts';
 
 // ────────────────────────────────────────────────────────
 // 1. DATASETS FOR EACH ROLE
@@ -183,33 +183,6 @@ const REPORTS_DATA = {
       { label: 'No-Show / Cancelled', pct: 4, color: 'bg-danger', val: '26 patients' },
     ],
   },
-  HR: {
-    staffCount: '97',
-    staffGrowth: '+5 new hires',
-    attendance: '95.2%',
-    attendanceGrowth: '+1.5%',
-    leaveResolved: '94%',
-    leaveGrowth: '4 Pending',
-    attendanceWeekly: [
-      { day: 'Mon', percentage: 95, height: '95%' },
-      { day: 'Tue', percentage: 92, height: '92%' },
-      { day: 'Wed', percentage: 97, height: '97%' },
-      { day: 'Thu', percentage: 92, height: '92%' },
-      { day: 'Fri', percentage: 93, height: '93%' },
-    ],
-    onboardingTrends: [
-      { day: 'Mon', active: 8, offboarding: 2, hSched: '80%', hWalk: '20%' },
-      { day: 'Tue', active: 9, offboarding: 1, hSched: '90%', hWalk: '10%' },
-      { day: 'Wed', active: 7, offboarding: 3, hSched: '70%', hWalk: '30%' },
-      { day: 'Thu', active: 9, offboarding: 2, hSched: '90%', hWalk: '20%' },
-      { day: 'Fri', active: 10, offboarding: 1, hSched: '100%', hWalk: '10%' },
-    ],
-    payrollCompletion: [
-      { label: 'Paid / Payroll Confirmed', pct: 93, color: 'bg-primary-600', val: '90 employees' },
-      { label: 'Pending Leave Calculations', pct: 5, color: 'bg-emerald-500', val: '5 employees' },
-      { label: 'On Hold / Dispute', pct: 2, color: 'bg-danger', val: '2 employees' },
-    ],
-  },
 };
 
 export default function ReportsPage() {
@@ -234,6 +207,36 @@ export default function ReportsPage() {
     () => reportsApi.payroll(clinicId!, { period: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}` }),
     { skip: !clinicId }
   );
+
+  // Date range for financial reports, driven by the Month/Year/Custom toggle.
+  const [dateRange, setDateRange] = useState('Month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const range = useMemo(() => {
+    if (dateRange === 'Year') {
+      const from = new Date(); from.setFullYear(from.getFullYear() - 1);
+      return { fromDate: from.toISOString().slice(0, 10), toDate: new Date().toISOString().slice(0, 10) };
+    }
+    if (dateRange === 'Custom' && customFrom && customTo) {
+      return { fromDate: customFrom, toDate: customTo };
+    }
+    const from = new Date(); from.setDate(from.getDate() - 30);
+    return { fromDate: from.toISOString().slice(0, 10), toDate: new Date().toISOString().slice(0, 10) };
+  }, [dateRange, customFrom, customTo]);
+
+  // Financial report data (scoped to the active clinic).
+  const { data: revenueReport } = useApiQuery(
+    () => reportsApi.revenue(clinicId!, range),
+    { skip: !clinicId }
+  );
+  const { data: inventoryReport } = useApiQuery(
+    () => reportsApi.inventory(clinicId!),
+    { skip: !clinicId }
+  );
+  const { data: patientReport } = useApiQuery(
+    () => reportsApi.patients(clinicId!, range),
+    { skip: !clinicId }
+  );
   const isMaster = role === 'MASTER';
   const isSubMaster = role === 'SUB_MASTER';
 
@@ -243,9 +246,6 @@ export default function ReportsPage() {
   });
 
   const [selectedClinic, setSelectedClinic] = useState('');
-  const [dateRange, setDateRange] = useState('Month');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
 
   // Reset viewScope if role dynamically switches
   useEffect(() => {
@@ -359,8 +359,37 @@ export default function ReportsPage() {
       zeroed.payrollCompletion = zeroed.payrollCompletion.map((p: any) => ({ ...p, pct: 0, val: '0 employees' }));
     }
 
+    // Financial dashboards (MASTER / SUB_MASTER): overlay real reportsApi data on
+    // top of the zeroed base. Anything the API hasn't returned stays at zero —
+    // no mock fallback.
+    if (isMaster || isSubMaster) {
+      const rev = revenueReport;
+      const inv = inventoryReport;
+      const pat = patientReport;
+      if (rev) {
+        const collected = Number(rev.collectedAmount) || 0;
+        const visits = pat ? pat.totalVisits : 0;
+        zeroed.revenue = `₹${(Number(rev.totalRevenue) || 0).toLocaleString('en-IN')}`;
+        zeroed.revenueGrowth = `₹${collected.toLocaleString('en-IN')} collected`;
+        zeroed.avgTicket = collected && visits ? `₹${Math.round(collected / visits).toLocaleString('en-IN')}` : '₹0';
+        const byDay = rev.byDay || [];
+        const max = byDay.reduce((m, d) => Math.max(m, d.amount), 0) || 1;
+        if (byDay.length) {
+          zeroed.revenueMonthly = byDay.map((d) => ({ month: (d.date || '').slice(5), val: Math.round(d.amount), height: `${Math.round((d.amount / max) * 100)}%` }));
+        }
+      }
+      if (pat) zeroed.patientsSeen = `${pat.totalVisits}`;
+      if (inv) {
+        zeroed.inventoryBreakdown = [
+          { label: 'Low Stock', pct: Math.min(100, inv.lowStockItems), color: 'bg-danger', val: `${inv.lowStockItems} items` },
+          { label: 'Expiring Soon', pct: Math.min(100, inv.expiringItems), color: 'bg-primary-600', val: `${inv.expiringItems} items` },
+          { label: 'Out of Stock', pct: Math.min(100, inv.outOfStock), color: 'bg-emerald-500', val: `${inv.outOfStock} items` },
+        ];
+      }
+    }
+
     return zeroed;
-  }, [viewScope, role]);
+  }, [viewScope, role, isMaster, isSubMaster, revenueReport, inventoryReport, patientReport]);
 
   // Master Dashboard OR Sub-Master Dashboard (Financial/Organizational money reports)
   if (isMaster || isSubMaster) {
@@ -410,7 +439,7 @@ export default function ReportsPage() {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
+              className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer"
             >
               <option value="Year">Year</option>
               <option value="Month">Month</option>
@@ -424,7 +453,7 @@ export default function ReportsPage() {
                   value={customFrom}
                   max={customTo || undefined}
                   onChange={(e) => setCustomFrom(e.target.value)}
-                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
+                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer"
                 />
                 <span className="text-xs font-semibold text-text-secondary">to</span>
                 <input
@@ -432,7 +461,7 @@ export default function ReportsPage() {
                   value={customTo}
                   min={customFrom || undefined}
                   onChange={(e) => setCustomTo(e.target.value)}
-                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200"
+                  className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer"
                 />
               </div>
             )}
@@ -441,7 +470,7 @@ export default function ReportsPage() {
               <select
                 value={selectedClinic}
                 onChange={(e) => setSelectedClinic(e.target.value)}
-                className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer border-slate-200 animate-scale-in"
+                className="text-xs font-semibold border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none cursor-pointer animate-scale-in"
               >
                 {clinics.length === 0 ? (
                   <option value="">No clinics</option>
@@ -480,7 +509,7 @@ export default function ReportsPage() {
               </div>
               <p className="text-[10px] text-text-muted">Recorded encounters</p>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -494,7 +523,7 @@ export default function ReportsPage() {
               </div>
               <p className="text-[10px] text-text-muted">Per check-in visit</p>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <Package className="w-5 h-5" />
             </div>
           </div>
@@ -507,7 +536,7 @@ export default function ReportsPage() {
             <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
               {data.revenueMonthly.map((item) => (
                 <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     ${item.val.toLocaleString()}
                   </div>
                   <div className="w-full bg-gradient-to-t from-primary-600 via-primary-500 to-teal-400 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
@@ -522,18 +551,18 @@ export default function ReportsPage() {
               <h3 className="text-sm font-bold text-text-primary">Patient Volume Breakdown</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Scheduled</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Walk-ins</span>
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-text-secondary"></span> Walk-ins</span>
               </div>
             </div>
             <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
               {data.patientTrends.map((item) => (
                 <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     <span>Sch: {item.scheduled}</span> <span>Walk: {item.walkin}</span>
                   </div>
                   <div className="flex items-end gap-1.5 h-full">
                     <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hSched }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hWalk }}></div>
+                    <div className="w-4 bg-text-secondary hover:bg-text-primary rounded-t-sm transition-all duration-500" style={{ height: item.hWalk }}></div>
                   </div>
                   <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
                 </div>
@@ -598,7 +627,7 @@ export default function ReportsPage() {
               </div>
               <p className="text-[10px] text-text-muted">Patients treated this period</p>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -626,7 +655,7 @@ export default function ReportsPage() {
               </div>
               <p className="text-[10px] text-text-muted">Consultations resulting in Rx</p>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <FileText className="w-5 h-5" />
             </div>
           </div>
@@ -639,7 +668,7 @@ export default function ReportsPage() {
             <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
               {data.consultationsMonthly.map((item) => (
                 <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     {item.val} cases
                   </div>
                   <div className="w-full bg-gradient-to-t from-teal-600 to-primary-500 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
@@ -654,18 +683,18 @@ export default function ReportsPage() {
               <h3 className="text-sm font-bold text-text-primary">Diagnoses Categorization</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Chronic Diseases</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Acute Illness</span>
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-text-secondary"></span> Acute Illness</span>
               </div>
             </div>
             <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
               {data.diagnosisTrends.map((item) => (
                 <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     <span>Chronic: {item.chronic}</span> <span>Acute: {item.acute}</span>
                   </div>
                   <div className="flex items-end gap-1.5 h-full">
                     <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hChronic }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hAcute }}></div>
+                    <div className="w-4 bg-text-secondary hover:bg-text-primary rounded-t-sm transition-all duration-500" style={{ height: item.hAcute }}></div>
                   </div>
                   <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
                 </div>
@@ -728,7 +757,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.intakesGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -754,7 +783,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.remindersGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -766,7 +795,7 @@ export default function ReportsPage() {
             <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
               {data.intakesWeekly.map((item) => (
                 <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     {item.val} screens
                   </div>
                   <div className="w-full bg-gradient-to-t from-teal-600 to-primary-500 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
@@ -781,18 +810,18 @@ export default function ReportsPage() {
               <h3 className="text-sm font-bold text-text-primary">Screening Type Distribution</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Routine Care</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Urgent Triage</span>
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-text-secondary"></span> Urgent Triage</span>
               </div>
             </div>
             <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
               {data.screeningBreakdown.map((item) => (
                 <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     <span>Routine: {item.routine}</span> <span>Urgent: {item.urgent}</span>
                   </div>
                   <div className="flex items-end gap-1.5 h-full">
                     <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hRoutine }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hUrgent }}></div>
+                    <div className="w-4 bg-text-secondary hover:bg-text-primary rounded-t-sm transition-all duration-500" style={{ height: item.hUrgent }}></div>
                   </div>
                   <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
                 </div>
@@ -855,7 +884,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.dispensedGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Pill className="w-5 h-5" />
             </div>
           </div>
@@ -881,7 +910,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.expiryGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -893,7 +922,7 @@ export default function ReportsPage() {
             <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
               {data.dispensationMonthly.map((item) => (
                 <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     {item.val} units
                   </div>
                   <div className="w-full bg-gradient-to-t from-teal-600 to-primary-500 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
@@ -908,18 +937,18 @@ export default function ReportsPage() {
               <h3 className="text-sm font-bold text-text-primary">Dispensation Categories</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Prescriptions</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Over-The-Counter</span>
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-text-secondary"></span> Over-The-Counter</span>
               </div>
             </div>
             <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
               {data.dispensedCategories.map((item) => (
                 <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     <span>Rx: {item.prescription}</span> <span>OTC: {item.otc}</span>
                   </div>
                   <div className="flex items-end gap-1.5 h-full">
                     <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hPresc }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hOtc }}></div>
+                    <div className="w-4 bg-text-secondary hover:bg-text-primary rounded-t-sm transition-all duration-500" style={{ height: item.hOtc }}></div>
                   </div>
                   <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
                 </div>
@@ -982,7 +1011,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.checkedInGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -1008,7 +1037,7 @@ export default function ReportsPage() {
                 <span className="text-xs font-bold text-success">{data.cancelGrowth}</span>
               </div>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <Calendar className="w-5 h-5" />
             </div>
           </div>
@@ -1020,7 +1049,7 @@ export default function ReportsPage() {
             <div className="h-[220px] flex items-end gap-3 sm:gap-6 pt-6 border-b border-border-light pb-2 select-none">
               {data.checkinsMonthly.map((item) => (
                 <div key={item.month} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     {item.val} patients
                   </div>
                   <div className="w-full bg-gradient-to-t from-teal-600 to-primary-500 rounded-t-md transition-all duration-500 group-hover:brightness-105" style={{ height: item.height }}></div>
@@ -1035,18 +1064,18 @@ export default function ReportsPage() {
               <h3 className="text-sm font-bold text-text-primary">Daily Flow Typology</h3>
               <div className="flex items-center gap-2">
                 <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-primary-600"></span> Scheduled</span>
-                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-slate-300"></span> Walk-ins</span>
+                <span className="flex items-center gap-1 text-[9px] font-semibold text-text-secondary"><span className="w-2.5 h-2.5 rounded bg-text-secondary"></span> Walk-ins</span>
               </div>
             </div>
             <div className="h-[220px] flex items-end justify-between pt-6 border-b border-border-light pb-2 select-none px-2 sm:px-4">
               {data.patientFlowType.map((item) => (
                 <div key={item.day} className="flex flex-col items-center h-full justify-end cursor-pointer group relative">
-                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2">
+                  <div className="absolute bottom-[92%] opacity-0 group-hover:opacity-100 bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow pointer-events-none whitespace-nowrap z-10 flex gap-2 dark:bg-surface dark:text-text-primary dark:border dark:border-border">
                     <span>Sched: {item.scheduled}</span> <span>Walk: {item.walkin}</span>
                   </div>
                   <div className="flex items-end gap-1.5 h-full">
                     <div className="w-4 bg-primary-600 hover:bg-primary-700 rounded-t-sm transition-all duration-500" style={{ height: item.hSched }}></div>
-                    <div className="w-4 bg-slate-300 hover:bg-slate-400 rounded-t-sm transition-all duration-500" style={{ height: item.hWalk }}></div>
+                    <div className="w-4 bg-text-secondary hover:bg-text-primary rounded-t-sm transition-all duration-500" style={{ height: item.hWalk }}></div>
                   </div>
                   <span className="text-[10px] font-semibold text-text-secondary mt-2.5">{item.day}</span>
                 </div>
@@ -1126,7 +1155,7 @@ export default function ReportsPage() {
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Total Staff Registered</p>
               <span className="text-2xl font-black text-text-primary">{staff.length}</span>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+            <div className="w-10 h-10 rounded-lg bg-teal-500/10 flex items-center justify-center text-teal-500 dark:text-teal-400">
               <Users className="w-5 h-5" />
             </div>
           </div>
@@ -1146,7 +1175,7 @@ export default function ReportsPage() {
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Leave Resolution Rate</p>
               <span className="text-2xl font-black text-text-primary">{pct(lReport?.resolutionRate || 0)}</span>
             </div>
-            <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
               <Clock className="w-5 h-5" />
             </div>
           </div>
@@ -1154,7 +1183,7 @@ export default function ReportsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {attendanceTrend.length ? (
-            <BarChartCard title="Weekly Attendance Rate" data={attendanceTrend} xKey="label" yKey="rate" suffix="%" color="#0d9488" height={220} />
+            <BarChartCard title="Weekly Attendance Rate" data={attendanceTrend} xKey="label" yKey="rate" suffix="%" color="var(--chart-1)" height={220} />
           ) : empty('No attendance recorded yet')}
 
           {leaveByType.length ? (

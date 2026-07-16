@@ -17,11 +17,11 @@ export const PRESCRIPTION_STATUS_LABELS: Record<PrescriptionStatus, string> = {
 
 // ponytail: badges only — color classes map 1:1 to status
 export const PRESCRIPTION_STATUS_BADGE: Record<PrescriptionStatus, string> = {
-  ACTIVE: 'bg-blue-100 text-blue-700',
-  DISPENSED: 'bg-indigo-100 text-indigo-700',
-  PAID: 'bg-green-100 text-green-700',
-  NOT_ARRIVED: 'bg-amber-100 text-amber-700',
-  CANCELLED: 'bg-red-100 text-red-700',
+  ACTIVE: 'bg-blue-500/15 text-blue-700 dark:text-blue-300 border border-blue-500/25',
+  DISPENSED: 'bg-primary-500/15 text-primary-700 dark:text-primary-300 border border-primary-500/25',
+  PAID: 'bg-success/15 text-success border border-success/25',
+  NOT_ARRIVED: 'bg-warning/15 text-warning border border-warning/25',
+  CANCELLED: 'bg-danger/15 text-danger border border-danger/25',
 };
 
 export interface Prescription {

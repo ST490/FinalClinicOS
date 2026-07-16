@@ -117,7 +117,7 @@ function MasterDashboard() {
     clinicName: c.name,
     revenue: 0,
     percentage: 0,
-    color: ['#0d9488', '#0ea5e9', '#6366f1', '#f43f5e'][i % 4],
+    color: ['#6fb3e0', '#8b93d9', '#14b8a6', '#f59e0b'][i % 4],
   }));
 
   const clinicColumns: Column<Clinic>[] = [
@@ -260,7 +260,7 @@ function MasterDashboard() {
 
       {/* Add Clinic Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-primary-500" />
@@ -308,7 +308,7 @@ function MasterDashboard() {
 
       {/* Delete Branch confirmation modal — requires typing "delete" */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-danger" />

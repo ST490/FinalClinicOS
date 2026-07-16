@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { staffApi, type StaffMember, type StaffInvite } from '../lib/staff';
+import { staffApi, sortOffboardedLast, type StaffMember, type StaffInvite } from '../lib/staff';
 import { DEFAULT_DEPARTMENTS } from '../lib/constants';
 import {
   UserPlus, Mail, Phone, UserMinus, Search, Copy, Check, Loader2,
@@ -42,6 +42,10 @@ export default function StaffPage() {
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Offboard confirmation (typed "remove" gate)
+  const [deactivateTarget, setDeactivateTarget] = useState<string | null>(null);
+  const [deactivateConfirmText, setDeactivateConfirmText] = useState('');
+
   // Modal State
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -60,22 +64,25 @@ export default function StaffPage() {
   const [directDepartment, setDirectDepartment] = useState<string>('Security');
   const [directCustomDept, setDirectCustomDept] = useState('');
   const [directSalary, setDirectSalary] = useState('');
+  const [directWageType, setDirectWageType] = useState<string>('MONTHLY');
+  const [directEmploymentType, setDirectEmploymentType] = useState<string>('PERMANENT');
   const [directAdding, setDirectAdding] = useState(false);
   const [directError, setDirectError] = useState('');
 
   // Load Data
   const loadData = async () => {
-    if (!clinic?.id) {
-      setStaff([]);
-      setInvites([]);
-      return;
-    }
     setLoading(true);
     setError('');
     try {
-      const staffList = await staffApi.list({ clinicId: clinic.id });
-      const invitesList = await staffApi.listInvites({ clinicId: clinic.id });
-      setStaff(staffList);
+      const staffList = await staffApi.list({
+        ...(clinic?.id ? { clinicId: clinic.id } : {}),
+        // In "All Branches" (master org-wide) view, hide offboarded staff.
+        includeInactive: !!clinic?.id,
+      });
+      const invitesList = clinic?.id
+        ? await staffApi.listInvites({ clinicId: clinic.id })
+        : [];
+      setStaff(sortOffboardedLast(staffList, clinic?.id));
       setInvites(invitesList);
     } catch (err: any) {
       setError(err?.response?.data?.error?.message || err.message || 'Failed to fetch staff data.');
@@ -146,6 +153,8 @@ export default function StaffPage() {
         role: directRole as any,
         department:
           directDepartment === '__custom__' ? directCustomDept.trim() || undefined : directDepartment || undefined,
+        wageType: directWageType as any,
+        employmentType: directEmploymentType as any,
         salary: directSalary ? Number(directSalary) : undefined,
       });
       setDirectName('');
@@ -155,6 +164,8 @@ export default function StaffPage() {
       setDirectDepartment('Security');
       setDirectCustomDept('');
       setDirectSalary('');
+      setDirectWageType('MONTHLY');
+      setDirectEmploymentType('PERMANENT');
       setIsDirectAddOpen(false);
       await loadData();
     } catch (err: any) {
@@ -164,12 +175,20 @@ export default function StaffPage() {
     }
   };
 
-  // Handle Deactivate
-  const handleDeactivate = async (userId: string) => {
+  // Handle Deactivate — opens the typed-confirmation gate (no instant removal)
+  const openDeactivate = (userId: string) => {
     if (!clinic?.id) return;
-    if (!window.confirm('Are you sure you want to remove/deactivate this staff member?')) return;
+    setDeactivateTarget(userId);
+    setDeactivateConfirmText('');
+  };
+
+  const confirmDeactivate = async () => {
+    if (!deactivateTarget || !clinic?.id) return;
+    if (deactivateConfirmText.trim().toLowerCase() !== 'remove') return;
     try {
-      await staffApi.deactivate(userId, clinic.id);
+      await staffApi.deactivate(deactivateTarget, clinic.id);
+      setDeactivateTarget(null);
+      setDeactivateConfirmText('');
       await loadData();
     } catch (err: any) {
       alert(err?.response?.data?.error?.message || err.message || 'Failed to deactivate staff member');
@@ -223,12 +242,12 @@ export default function StaffPage() {
             <div className="font-semibold text-text-primary flex items-center gap-1.5">
               {item.name}
               {item.isOrgOwner && (
-                <span className="text-[10px] bg-red-50 text-red-700 px-1.5 py-0.5 rounded-full border border-red-200 font-medium">Owner</span>
+                <span className="text-[10px] bg-danger/15 text-danger px-1.5 py-0.5 rounded-full border border-danger/25 font-medium">Owner</span>
               )}
               {item.clinicRoles?.some(r => r.role === 'SUPPORT') && (() => {
                 const dept = item.clinicRoles.find(r => r.clinicId === clinic?.id)?.department;
                 return dept ? (
-                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full border border-slate-200 font-medium">{dept}</span>
+                  <span className="text-[10px] bg-slate-500/15 text-slate-600 dark:text-slate-300 px-1.5 py-0.5 rounded-full border border-slate-500/25 font-medium">{dept}</span>
                 ) : null;
               })()}
             </div>
@@ -277,11 +296,15 @@ export default function StaffPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (item) => (
-        <Badge variant={item.status === 'ACTIVE' ? 'success' : 'neutral'}>
-          {item.status}
-        </Badge>
-      ),
+      render: (item) => {
+        const role = item.clinicRoles?.find((r) => !clinic?.id || r.clinicId === clinic?.id);
+        const offboarded = role?.status === 'DISABLED' || item.status === 'DISABLED';
+        return (
+          <Badge variant={offboarded ? 'neutral' : 'success'}>
+            {offboarded ? 'Offboarded' : 'Active'}
+          </Badge>
+        );
+      },
     },
     {
       key: 'actions',
@@ -290,7 +313,7 @@ export default function StaffPage() {
         if (item.isOrgOwner || item.id === user?.id) return null;
         return (
           <button
-            onClick={() => handleDeactivate(item.id)}
+            onClick={() => openDeactivate(item.id)}
             className="flex items-center gap-1 text-xs font-semibold text-danger hover:bg-red-50 hover:text-red-700 px-3 py-1.5 rounded-lg border border-red-200 transition-colors cursor-pointer"
           >
             <UserMinus className="w-3.5 h-3.5" />
@@ -447,7 +470,7 @@ export default function StaffPage() {
               : 'border-transparent text-text-secondary hover:text-text-primary'
           }`}
         >
-          Active Staff ({filteredStaff.length})
+          Staff ({filteredStaff.length})
         </button>
         <button
           onClick={() => setActiveTab('invites')}
@@ -493,7 +516,7 @@ export default function StaffPage() {
 
       {/* Invite Modal */}
       {isInviteModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-primary-500" />
@@ -502,7 +525,7 @@ export default function StaffPage() {
 
             {inviteSuccess ? (
               <div className="space-y-4">
-                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-sm flex gap-3">
+                <div className="p-4 bg-success/10 border border-success/25 rounded-xl text-success text-sm flex gap-3">
                   <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
                   <div>
                     <div className="font-semibold">Invitation Created Successfully!</div>
@@ -623,7 +646,7 @@ export default function StaffPage() {
 
       {/* Direct Add Modal — non-clinical staff, no invite/login */}
       {isDirectAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-500" />
@@ -694,9 +717,39 @@ export default function StaffPage() {
                 )}
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">
+                    Pay Frequency
+                  </label>
+                  <select
+                    value={directWageType}
+                    onChange={(e) => setDirectWageType(e.target.value)}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                  >
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="HOURLY">Hourly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">
+                    Contract Type
+                  </label>
+                  <select
+                    value={directEmploymentType}
+                    onChange={(e) => setDirectEmploymentType(e.target.value)}
+                    className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                  >
+                    <option value="PERMANENT">Permanent</option>
+                    <option value="CONTRACT">Contract</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">
-                  Monthly Salary
+                  {directWageType === 'HOURLY' ? 'Hourly Rate' : directWageType === 'DAILY' ? 'Daily Rate' : 'Monthly Salary'}
                 </label>
                 <input
                   type="number"
@@ -753,6 +806,50 @@ export default function StaffPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Offboard confirmation — must type "remove" to confirm */}
+      {deactivateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative">
+            <h3 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
+              <UserMinus className="w-5 h-5 text-danger" />
+              Remove Staff Member
+            </h3>
+            <p className="text-xs text-text-secondary mb-4">
+              This offboards the staff member (their clinic role is disabled) and they remain visible in HR as{' '}
+              <span className="font-semibold text-text-primary">Offboarded</span>. Type{' '}
+              <span className="font-mono font-semibold text-text-primary">remove</span> to confirm.
+            </p>
+            <input
+              autoFocus
+              type="text"
+              value={deactivateConfirmText}
+              onChange={(e) => setDeactivateConfirmText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') confirmDeactivate(); }}
+              placeholder="Type 'remove' to confirm"
+              className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-red-500/20 focus:border-danger"
+            />
+            <div className="flex gap-3 justify-end pt-4">
+              <button
+                type="button"
+                onClick={() => { setDeactivateTarget(null); setDeactivateConfirmText(''); }}
+                className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary border border-border rounded-lg hover:bg-surface transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deactivateConfirmText.trim().toLowerCase() !== 'remove'}
+                onClick={confirmDeactivate}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                <UserMinus className="w-3.5 h-3.5" />
+                Remove
+              </button>
+            </div>
           </div>
         </div>
       )}

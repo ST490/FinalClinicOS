@@ -18,6 +18,7 @@ export default function SchedulingPage() {
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
   const [slotDuration, setSlotDuration] = useState(30);
+  const [shiftType, setShiftType] = useState<'DAY' | 'NIGHT' | 'ROTATIONAL' | 'OFF'>('DAY');
   const [editError, setEditError] = useState('');
 
   const load = async (silent = false) => {
@@ -61,6 +62,7 @@ export default function SchedulingPage() {
     setStartTime(existing?.startTime ?? '09:00');
     setEndTime(existing?.endTime ?? '17:00');
     setSlotDuration(existing?.slotDuration ?? 30);
+    setShiftType(existing ? (existing.isActive ? (existing.shiftType ?? 'DAY') : 'OFF') : 'DAY');
     setEditError('');
   };
 
@@ -70,6 +72,7 @@ export default function SchedulingPage() {
     setSaving(true);
     setEditError('');
     try {
+      const isOff = shiftType === 'OFF';
       await staffApi.setSchedule({
         clinicId: clinic.id,
         userId: editing.userId,
@@ -77,7 +80,9 @@ export default function SchedulingPage() {
         startTime,
         endTime,
         slotDuration,
-      });
+        shiftType: isOff ? undefined : shiftType,
+        isActive: !isOff,
+      } as any);
       setEditing(null);
       await load(true);
     } catch (err: any) {
@@ -125,6 +130,12 @@ export default function SchedulingPage() {
         <span className="text-xs text-text-muted">
           {staff.length} staff · {schedules.filter((s) => s.isActive).length} active shifts
         </span>
+        <span className="flex items-center gap-3 text-[11px] text-text-muted ml-auto">
+          <span className="inline-flex items-center gap-1"><span className="bg-teal-100 text-teal-700 font-bold px-1.5 rounded leading-none py-0.5">D</span> Day</span>
+          <span className="inline-flex items-center gap-1"><span className="bg-primary-500/20 text-primary-700 dark:text-primary-300 font-bold px-1.5 rounded leading-none py-0.5">N</span> Night</span>
+          <span className="inline-flex items-center gap-1"><span className="bg-warning/20 text-warning font-bold px-1.5 rounded leading-none py-0.5">R</span> Rotational</span>
+          <span className="inline-flex items-center gap-1"><span className="bg-text-muted/15 text-text-secondary font-bold px-1.5 rounded leading-none py-0.5">O</span> Off</span>
+        </span>
       </div>
 
       {loading ? (
@@ -157,6 +168,19 @@ export default function SchedulingPage() {
                   {DAYS.map((_, dow) => {
                     const cell = grid.get(`${s.id}|${dow}`);
                     const active = cell?.isActive !== false;
+                    const code = cell
+                      ? active
+                        ? cell.shiftType === 'NIGHT'
+                          ? 'N'
+                          : cell.shiftType === 'ROTATIONAL'
+                            ? 'R'
+                            : 'D'
+                        : 'O'
+                      : null;
+                    const codeClass =
+                      code === 'N' ? 'bg-primary-500/20 text-primary-700 dark:text-primary-300'
+                        : code === 'R' ? 'bg-warning/20 text-warning'
+                          : 'bg-teal-500/20 text-teal-700 dark:text-teal-300';
                     return (
                       <td key={dow} className="px-2 py-2 text-center border-l border-border-light">
                         <button
@@ -168,8 +192,11 @@ export default function SchedulingPage() {
                           }`}
                         >
                           {cell && active ? (
-                            <span className="font-medium font-mono whitespace-nowrap">
-                              {cell.startTime}–{cell.endTime}
+                            <span className="flex flex-col items-center gap-1">
+                              <span className={`text-[10px] font-bold leading-none px-1.5 py-0.5 rounded ${codeClass}`}>{code}</span>
+                              <span className="font-medium font-mono whitespace-nowrap">
+                                {cell.startTime}–{cell.endTime}
+                              </span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1"><Plus className="w-3 h-3" /> Set</span>
@@ -205,6 +232,16 @@ export default function SchedulingPage() {
             <div className="mt-3">
               <label className="text-xs font-medium text-text-secondary">Slot duration (min)</label>
               <input type="number" min={5} step={5} value={slotDuration} onChange={(e) => setSlotDuration(Number(e.target.value) || 30)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
+            </div>
+            <div className="mt-3">
+              <label className="text-xs font-medium text-text-secondary">Shift type</label>
+              <select value={shiftType} onChange={(e) => setShiftType(e.target.value as 'DAY' | 'NIGHT' | 'ROTATIONAL' | 'OFF')} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10">
+                <option value="DAY">Day (D)</option>
+                <option value="NIGHT">Night (N)</option>
+                <option value="ROTATIONAL">Rotational (R)</option>
+                <option value="OFF">Off (O)</option>
+              </select>
+              <p className="text-[11px] text-text-muted mt-1">Off marks the shift inactive — the cell shows "O" in the grid.</p>
             </div>
             {editError && <div className="text-xs text-danger mt-2">{editError}</div>}
             <div className="flex justify-end gap-2 pt-4">

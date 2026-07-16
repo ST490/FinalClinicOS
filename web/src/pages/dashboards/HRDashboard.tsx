@@ -1,6 +1,8 @@
 import { statsByRole } from '../../lib/constants';
 import StatCard from '../../components/ui/StatCard';
 import Badge from '../../components/ui/Badge';
+import EmptyState from '../../components/ui/EmptyState';
+import { CalendarOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useApiQuery } from '../../lib/useApiQuery';
 import { staffApi } from '../../lib/staff';
@@ -29,7 +31,7 @@ export default function HRDashboard() {
   const clinicId = clinic?.id;
 
   const { data: staffList } = useApiQuery(
-    () => staffApi.list({ clinicId }),
+    () => staffApi.list({ clinicId, includeInactive: true }),
     { skip: !clinicId }
   );
   const { data: summary } = useApiQuery(
@@ -97,7 +99,7 @@ export default function HRDashboard() {
         {/* Recent Staff Attendance (trend) */}
         <div className="lg:col-span-1">
           {trend.length ? (
-            <LineChartCard title="Staff Attendance (14-day trend)" data={trend} xKey="date" yKey="rate" suffix="%" color="#0d9488" />
+            <LineChartCard title="Staff Attendance (14-day trend)" data={trend} xKey="date" yKey="rate" suffix="%" color="var(--chart-1)" />
           ) : (
             <div className="bg-surface-card rounded-xl border border-border p-5 h-full flex items-center justify-center text-xs text-text-muted italic">
               No attendance recorded yet
@@ -156,11 +158,7 @@ export default function HRDashboard() {
               </thead>
               <tbody className="divide-y divide-border-light">
                 {leaves.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-6 text-center text-xs text-text-muted italic">
-                      No pending leave requests
-                    </td>
-                  </tr>
+                  <EmptyState icon={CalendarOff} message="No pending leave requests" colSpan={4} compact />
                 ) : (
                   leaves.slice(0, 5).map((lr: any) => (
                     <tr key={lr.id} className="hover:bg-surface/50 transition-colors">
@@ -259,6 +257,7 @@ export default function HRDashboard() {
                 <tr className="border-b border-border-light">
                   <th className="px-4 py-2 text-left font-semibold text-text-secondary">Employee</th>
                   <th className="px-4 py-2 text-left font-semibold text-text-secondary">Role</th>
+                  <th className="px-4 py-2 text-left font-semibold text-text-secondary">Compensation / Type</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
@@ -269,14 +268,34 @@ export default function HRDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  staff.slice(0, 6).map((s: any) => (
+                  staff.slice(0, 6).map((s: any) => {
+                    const role = s.clinicRoles?.[0];
+                    const wageLabel = role?.wageType || 'MONTHLY';
+                    const comp = role?.baseRate != null
+                      ? `${wageLabel} · ₹${Number(role.baseRate).toLocaleString()}`
+                      : wageLabel;
+                    return (
                     <tr key={s.id} className="hover:bg-surface/50 transition-colors">
                       <td className="px-4 py-2.5 font-medium text-text-primary">{s.name}</td>
                       <td className="px-4 py-2.5 text-text-secondary">
-                        {s.clinicRoles?.[0]?.role || '—'}
+                        <div className="flex items-center gap-2">
+                          <span>{role?.role || '—'}</span>
+                          {role?.status === 'DISABLED' && (
+                            <Badge variant="neutral">Offboarded</Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-text-secondary">
+                        <div className="flex items-center gap-2">
+                          <span>{comp}</span>
+                          {role?.employmentType === 'CONTRACT' && (
+                            <Badge variant="warning">Contract</Badge>
+                          )}
+                        </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

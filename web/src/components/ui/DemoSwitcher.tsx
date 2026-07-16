@@ -39,15 +39,15 @@ export default function DemoSwitcher() {
     <div className="fixed bottom-5 right-5 z-[9999] flex flex-col items-end gap-3 font-sans">
       {/* Popover list */}
       {isOpen && (
-        <div className="w-80 bg-white/90 backdrop-blur-md border border-slate-200 rounded-2xl p-4 shadow-2xl animate-fade-in transition-all">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+        <div className="w-80 bg-surface-card backdrop-blur-md border border-border rounded-2xl p-4 shadow-2xl animate-fade-in transition-all">
+          <div className="flex items-center justify-between border-b border-border-light pb-2 mb-3">
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-4 h-4 text-primary-500 animate-pulse" />
-              <span className="text-sm font-bold text-slate-800">Demo Accounts Switcher</span>
+              <span className="text-sm font-bold text-text-primary">Demo Accounts Switcher</span>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+              className="p-1 rounded-lg hover:bg-surface text-text-muted hover:text-text-secondary transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -68,15 +68,15 @@ export default function DemoSwitcher() {
                   key={u.email}
                   onClick={() => handleSwitch(u.email)}
                   disabled={!!isSwitching}
-                  className="w-full flex items-center justify-between p-2 rounded-xl text-left bg-slate-50 hover:bg-primary-50/50 hover:scale-[1.01] transition-all border border-slate-100 hover:border-primary-100 group cursor-pointer disabled:opacity-50"
+                  className="w-full flex items-center justify-between p-2 rounded-xl text-left bg-surface hover:bg-surface-elevated hover:scale-[1.01] transition-all border border-border hover:border-primary-200 group cursor-pointer disabled:opacity-50"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${u.color} flex items-center justify-center text-white text-xs font-bold shadow-sm group-hover:shadow-md transition-shadow shrink-0`}>
                       {u.role.slice(0, 2)}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-700 truncate">{u.name}</p>
-                      <p className="text-[10px] text-slate-400 truncate">{u.email}</p>
+                      <p className="text-xs font-semibold text-text-primary truncate">{u.name}</p>
+                      <p className="text-[10px] text-text-muted truncate">{u.email}</p>
                     </div>
                   </div>
                   {active && (
@@ -92,7 +92,7 @@ export default function DemoSwitcher() {
       {/* Floating Trigger button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-indigo-600 hover:from-primary-700 hover:to-indigo-700 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer font-semibold text-xs`}
+        className={`flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all cursor-pointer font-semibold text-xs`}
       >
         {isOpen ? (
           <>
