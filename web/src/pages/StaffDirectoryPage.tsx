@@ -130,6 +130,11 @@ export default function StaffDirectoryPage() {
 
     const sorted = [...rows];
     sorted.sort((a, b) => {
+      const offA = isOffboarded(a, clinic?.id);
+      const offB = isOffboarded(b, clinic?.id);
+      if (offA !== offB) {
+        return offA ? 1 : -1;
+      }
       switch (sortBy) {
         case 'type': {
           const ra = primaryRoleFor(a)?.role ?? '';
@@ -154,7 +159,7 @@ export default function StaffDirectoryPage() {
       }
     });
     return sorted;
-  }, [staff, searchQuery, roleFilter, departmentFilter, statusFilter, sortBy]);
+  }, [staff, searchQuery, roleFilter, departmentFilter, statusFilter, sortBy, clinic?.id]);
 
   const columns: Column<StaffMember>[] = [
     {
@@ -201,7 +206,14 @@ export default function StaffDirectoryPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (m) => <Badge variant={STATUS_COLORS[m.status] ?? 'neutral'}>{m.status}</Badge>,
+      render: (m) => {
+        const offboarded = isOffboarded(m, clinic?.id);
+        return (
+          <Badge variant={offboarded ? 'neutral' : 'success'}>
+            {offboarded ? 'Offboarded' : 'Active'}
+          </Badge>
+        );
+      },
     },
     {
       key: 'branch',
