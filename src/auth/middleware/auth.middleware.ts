@@ -182,8 +182,8 @@ export async function loadUserRoles(req: Request, res: Response, next: NextFunct
         role: cr.role,
       }));
 
-    // If no active clinic, try to set primary
-    if (!req.user.activeClinicId && user.clinicRoles.length > 0) {
+    // If no active clinic, try to set primary (skip for org owners to preserve all-branches mode)
+    if (!req.user.activeClinicId && !req.user.isOrgOwner && user.clinicRoles.length > 0) {
       const primary = user.clinicRoles.find(cr => cr.isPrimary) || user.clinicRoles[0];
       req.user.activeClinicId = primary.clinicId;
     }

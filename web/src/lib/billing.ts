@@ -39,6 +39,7 @@ export const billingApi = {
     amountPaid?: number;
     paymentMethod?: string;
     paymentNotes?: string;
+    dueDate?: string;
     createdAt?: string;
   }) => {
     const res = await api.post<Due>('/dues', data);

@@ -5,13 +5,18 @@ import { Stethoscope, Loader2, CheckCircle2, ShieldAlert, UserPlus } from 'lucid
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, verify2FALogin } = useAuth();
 
   // Form state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // 2FA state
+  const [show2FA, setShow2FA] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
+  const [tempToken, setTempToken] = useState('');
 
   // ── Real API Login ──
   const handleRealLogin = async (e: React.FormEvent) => {
@@ -22,6 +27,12 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(email, password);
+      if (res && res.requires2FA) {
+        setTempToken(res.tempToken || '');
+        setShow2FA(true);
+        setLoading(false);
+        return;
+      }
       if (res && res.isInviteLogin) {
         navigate(`/accept-invite?token=${res.inviteToken}&email=${res.email}`);
         return;
@@ -33,6 +44,26 @@ export default function LoginPage() {
         err?.response?.data?.message ||
         err?.message ||
         'Login failed. Check your credentials and try again.';
+      setError(msg);
+      setLoading(false);
+    }
+  };
+
+  const handleVerify2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!totpCode) { setError('Please enter your 2FA verification code.'); return; }
+
+    setLoading(true);
+    try {
+      await verify2FALogin(tempToken, totpCode);
+      navigate('/');
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Verification failed. Please check the code and try again.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -64,46 +95,92 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form className="space-y-4" onSubmit={handleRealLogin}>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
-              <strong>Tip</strong> Use the credentials from your seeded database
-              (e.g. <code className="bg-blue-100 px-1 rounded">doctor@apexmedical.com</code> /
-              <code className="bg-blue-100 px-1 rounded">password123</code>)
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Email Address</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@clinic.com"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none" />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
-                className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none" />
-            </div>
-            <button type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 py-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2 shadow-sm">
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Signing in…</span>
-                </>
-              ) : (
-                <span>Sign In</span>
-              )}
-            </button>
-
-            {/* Sign Up CTA */}
-            <div className="pt-3 text-center border-t border-border">
-              <span className="text-xs text-text-muted">Don't have an account</span>
-              <Link
-                to="/signup"
-                className="flex items-center justify-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 mt-2"
+          {show2FA ? (
+            <form className="space-y-4" onSubmit={handleVerify2FA}>
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700">
+                <strong>Two-Factor Authentication</strong> Enter the 6-digit verification code from your authenticator app to complete sign-in.
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Verification Code</label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="000000"
+                  className="w-full text-center text-lg font-bold tracking-[0.5em] border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 py-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2 shadow-sm"
               >
-                <UserPlus className="w-3.5 h-3.5" />
-                Create your clinic account
-              </Link>
-            </div>
-          </form>
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying…</span>
+                  </>
+                ) : (
+                  <span>Verify & Sign In</span>
+                )}
+              </button>
+              <div className="pt-3 text-center border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShow2FA(false);
+                    setTotpCode('');
+                    setError('');
+                  }}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-semibold"
+                >
+                  ← Back to Login
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form className="space-y-4" onSubmit={handleRealLogin}>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+                <strong>Tip</strong> Use the credentials from your seeded database
+                (e.g. <code className="bg-blue-100 px-1 rounded">doctor@apexmedical.com</code> /
+                <code className="bg-blue-100 px-1 rounded">password123</code>)
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Email Address</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@clinic.com"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Password</label>
+                <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2.5 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none" />
+              </div>
+              <button type="submit" disabled={loading}
+                className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 py-3 rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mt-2 shadow-sm">
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Signing in…</span>
+                  </>
+                ) : (
+                  <span>Sign In</span>
+                )}
+              </button>
+
+              {/* Sign Up CTA */}
+              <div className="pt-3 text-center border-t border-border">
+                <span className="text-xs text-text-muted">Don't have an account</span>
+                <Link
+                  to="/signup"
+                  className="flex items-center justify-center gap-1.5 text-xs font-semibold text-primary-600 hover:text-primary-700 mt-2"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  Create your clinic account
+                </Link>
+              </div>
+            </form>
+          )}
         </div>
       </div>
 

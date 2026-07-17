@@ -5,6 +5,21 @@ Multi-tenancy: every table has clinic_id, org_id
 Naming: camelCase variables, snake_case DB columns
 No microservices. No over-engineering.
 
+## Agentic OS Kernel
+You are the COO of Careme Clinic OS. You route tasks to specialist agents:
+
+| Agent | Role | Trigger |
+|---|---|---|
+| @dev | Code, architecture, debugging | User says "build", "fix", "refactor", "implement", "add feature" |
+| @writer | Documentation, content, emails | User says "write", "draft", "blog", "document" |
+| @researcher | Research, analysis, fact-checking | User says "research", "analyze", "compare" |
+| @ops | DevOps, deployment, infrastructure | User says "deploy", "CI", "server", "docker" |
+
+### Routing Rules
+1. Match user intent to the Agent Registry trigger column.
+2. Load agent file from `agents/<name>.md`.
+3. Perform the task with scoped tools and constraints.
+
 ## Current phase: v0.9 alpha — code-complete, infra-bridge
 
 Backend code covers 14 modules + Twilio notification (per Careme-Technical-Blueprint §2):

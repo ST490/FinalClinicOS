@@ -18,6 +18,7 @@ interface DueInvoice {
   date: string;
   clinicName: string;
   status: 'PAID' | 'UNPAID';
+  dueDate: string | null;
 }
 
 export default function DuesPage() {
@@ -44,6 +45,7 @@ export default function DuesPage() {
         date: dateStr,
         clinicName: authClinic?.name || 'Clinic',
         status: (d.status === 'PAID' ? 'PAID' : 'UNPAID') as 'PAID' | 'UNPAID',
+        dueDate: d.dueDate || null,
       };
     });
   }, [apiData, authClinic]);
@@ -69,6 +71,11 @@ export default function DuesPage() {
   const [newClinic, setNewClinic] = useState(clinics[0]?.name ?? '');
   const [newAmount, setNewAmount] = useState('');
   const [newDate, setNewDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [newDueDate, setNewDueDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7); // Default due date is 7 days from now
+    return d.toISOString().split('T')[0];
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -124,6 +131,15 @@ export default function DuesPage() {
       billingDateTime = selected.toISOString();
     }
 
+    let dueDateTimeStr = undefined;
+    if (newDueDate) {
+      const [year, month, day] = newDueDate.split('-').map(Number);
+      const selected = new Date();
+      selected.setFullYear(year, month - 1, day);
+      selected.setHours(23, 59, 59, 999);
+      dueDateTimeStr = selected.toISOString();
+    }
+
     setSaving(true);
     const { error: apiErr } = await apiMutate(() =>
       billingApi.create({
@@ -131,6 +147,7 @@ export default function DuesPage() {
         patientId: newPatient,
         totalAmount: parsedAmount,
         createdAt: billingDateTime,
+        dueDate: dueDateTimeStr,
       }),
     );
     setSaving(false);
@@ -323,7 +340,14 @@ export default function DuesPage() {
                         }`}
                     >
                       <td className="px-5 py-4 font-semibold text-text-primary">{due.patientName}</td>
-                      <td className="px-5 py-4 text-text-secondary whitespace-nowrap">{due.date}</td>
+                      <td className="px-5 py-4 text-text-secondary whitespace-nowrap">
+                        <div>{due.date}</div>
+                        {due.dueDate && (
+                          <div className="text-[10px] text-text-muted mt-0.5 font-normal">
+                            Due: {new Date(due.dueDate).toLocaleDateString()}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-5 py-4 text-text-secondary">{due.clinicName}</td>
                       <td className="px-5 py-4 font-bold text-text-primary">${due.amount.toLocaleString()}</td>
                       <td className="px-5 py-4">
@@ -443,6 +467,17 @@ export default function DuesPage() {
                   required
                   value={newDate}
                   onChange={(e) => setNewDate(e.target.value)}
+                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200 cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-text-secondary block mb-1">Due Date *</label>
+                <input
+                  type="date"
+                  required
+                  value={newDueDate}
+                  onChange={(e) => setNewDueDate(e.target.value)}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 outline-none border-slate-200 cursor-pointer"
                 />
               </div>

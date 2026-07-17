@@ -80,8 +80,8 @@ export default function StaffPage() {
         // All-Branches (org owner) view shows the full org roster incl. offboarded.
         includeInactive: !clinic?.id,
       });
-      const invitesList = clinic?.id
-        ? await staffApi.listInvites({ clinicId: clinic.id })
+      const invitesList = (clinic?.id || user?.role === 'MASTER')
+        ? await staffApi.listInvites(clinic?.id ? { clinicId: clinic.id } : {})
         : [];
       setStaff(sortOffboardedLast(staffList, clinic?.id));
       setInvites(invitesList);
@@ -178,16 +178,15 @@ export default function StaffPage() {
 
   // Handle Deactivate — opens the typed-confirmation gate (no instant removal)
   const openDeactivate = (userId: string) => {
-    if (!clinic?.id) return;
     setDeactivateTarget(userId);
     setDeactivateConfirmText('');
   };
 
   const confirmDeactivate = async () => {
-    if (!deactivateTarget || !clinic?.id) return;
+    if (!deactivateTarget) return;
     if (deactivateConfirmText.trim().toLowerCase() !== 'remove') return;
     try {
-      await staffApi.deactivate(deactivateTarget, clinic.id);
+      await staffApi.deactivate(deactivateTarget, clinic?.id);
       setDeactivateTarget(null);
       setDeactivateConfirmText('');
       await loadData();

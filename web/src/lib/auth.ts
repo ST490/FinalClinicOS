@@ -163,6 +163,11 @@ export const authApi = {
     await api.post('/auth/2fa/verify', { code });
   },
 
+  verify2FALogin: async (tempToken: string, code: string): Promise<LoginResponse> => {
+    const res = await api.post<LoginResponse>('/auth/2fa/verify-login', { tempToken, code });
+    return res.data;
+  },
+
   deleteClinic: async (id: string): Promise<void> => {
     await api.delete(`/clinics/${id}`);
   },

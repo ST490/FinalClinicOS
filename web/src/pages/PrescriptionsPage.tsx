@@ -24,6 +24,23 @@ export default function PrescriptionsPage() {
   const [rxLoading, setRxLoading] = useState(false);
   const [printRx, setPrintRx] = useState<Prescription | null>(null);
   const [printing, setPrinting] = useState(false);
+  const [expandedRxId, setExpandedRxId] = useState<string | null>(null);
+
+  const handleDeleteRxItem = async (rxId: string, itemId: string) => {
+    if (!confirm('Are you sure you want to delete this medication from the prescription?')) return;
+    try {
+      await api.deleteItem(itemId);
+      setRxs(prev => prev.map(rx => {
+        if (rx.id !== rxId) return rx;
+        return {
+          ...rx,
+          items: (rx.items ?? []).filter(item => item.id !== itemId)
+        };
+      }));
+    } catch (err: any) {
+      alert(err?.response?.data?.error?.message || err?.message || 'Failed to delete prescription item');
+    }
+  };
 
   useEffect(() => {
     if (!clinic) return;
@@ -169,17 +186,66 @@ export default function PrescriptionsPage() {
         ) : (
           <div className="divide-y divide-border-light">
             {rxs.map(rx => (
-              <div key={rx.id} className="flex items-center justify-between py-3">
-                <div className="min-w-0">
-                  <p className="text-xs font-bold truncate">{rx.patient?.name ?? 'Unknown patient'}</p>
-                  <p className="text-[11px] text-text-secondary truncate">
-                    Dr. {rx.doctor?.name ?? '—'} · {new Date(rx.createdAt).toLocaleDateString()} · {rx.status}
-                  </p>
+              <div key={rx.id} className="py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0 cursor-pointer" onClick={() => setExpandedRxId(prev => prev === rx.id ? null : rx.id)}>
+                    <p className="text-xs font-bold text-text-primary hover:text-primary-600 transition-colors flex items-center gap-1.5">
+                      {rx.patient?.name ?? 'Unknown patient'}
+                      <span className="text-[10px] text-text-muted">({(rx.items ?? []).length} items)</span>
+                    </p>
+                    <p className="text-[11px] text-text-secondary truncate">
+                      Dr. {rx.doctor?.name ?? '—'} · {new Date(rx.createdAt).toLocaleDateString()} · {rx.status}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setExpandedRxId(prev => prev === rx.id ? null : rx.id)}
+                      className="text-[11px] font-semibold text-text-secondary hover:text-text-primary px-2.5 py-1.5 rounded-lg border border-border">
+                      {expandedRxId === rx.id ? 'Hide Details' : 'View Items'}
+                    </button>
+                    <button onClick={() => handlePrint(rx.id)} disabled={printing}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-900 px-3 py-2 rounded-lg disabled:opacity-50">
+                      <Printer className="w-3.5 h-3.5" /> Print
+                    </button>
+                  </div>
                 </div>
-                <button onClick={() => handlePrint(rx.id)} disabled={printing}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-900 px-3 py-2 rounded-lg disabled:opacity-50">
-                  <Printer className="w-3.5 h-3.5" /> Print
-                </button>
+
+                {expandedRxId === rx.id && (
+                  <div className="bg-surface rounded-xl p-3 border border-border space-y-2 ml-2 animate-scale-in">
+                    <p className="text-[10px] font-bold text-text-secondary uppercase tracking-wider">Medications List</p>
+                    {(rx.items ?? []).length === 0 ? (
+                      <p className="text-xs text-text-muted italic">No items in this prescription.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {(rx.items ?? []).map(item => (
+                          <div key={item.id} className="flex justify-between items-center text-xs p-2 bg-surface-card rounded-lg border border-border-light">
+                            <div>
+                              <p className="font-semibold text-text-primary">
+                                {item.medicine?.genericName || item.customName || 'Medication'}
+                              </p>
+                              <p className="text-[10px] text-text-muted mt-0.5">
+                                Dosage: {item.dosage || '—'} · Freq: {item.frequency || '—'} · Dur: {item.duration || '—'}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.dispensed ? (
+                                <span className="text-[10px] text-green-600 font-semibold px-2 py-0.5 bg-green-50 rounded-full border border-green-200">Dispensed</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteRxItem(rx.id, item.id)}
+                                  className="text-text-muted hover:text-danger p-1 rounded-lg hover:bg-surface-card transition-colors"
+                                  title="Delete medication line"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

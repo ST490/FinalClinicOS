@@ -105,8 +105,13 @@ export const prescriptionApi = {
     return res.data;
   },
 
-  dispense: async (id: string, items: { prescriptionItemId: string; quantity: number }[]) => {
-    const res = await api.post<Prescription>(`/prescriptions/${id}/dispense`, { items });
+  dispense: async (id: string, items: { prescriptionItemId: string; quantity: number }[], secondSignatoryId?: string) => {
+    const res = await api.post<Prescription>(`/prescriptions/${id}/dispense`, { items, secondSignatoryId });
+    return res.data;
+  },
+
+  deleteItem: async (itemId: string) => {
+    const res = await api.delete<{ success: boolean }>(`/prescriptions/items/${itemId}`);
     return res.data;
   },
 

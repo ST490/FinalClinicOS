@@ -8,6 +8,8 @@ import {
   type Prescription,
   type PrescriptionStatus,
 } from '../lib/prescriptions';
+import { inventoryApi } from '../lib/inventory';
+import { staffApi, type StaffMember } from '../lib/staff';
 import { Pill, Loader2, CheckCircle2, Banknote, UserX, XCircle, PackageCheck } from 'lucide-react';
 
 const FILTERS: (PrescriptionStatus | 'ALL')[] = ['ALL', 'ACTIVE', 'DISPENSED', 'PAID', 'NOT_ARRIVED', 'CANCELLED'];
@@ -25,6 +27,41 @@ export default function DispensingPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  
+  const [controlledItems, setControlledItems] = useState<any[]>([]);
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [selectedSignatories, setSelectedSignatories] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchControlledAndStaff = async () => {
+      if (!clinic) return;
+      try {
+        const [controlledRes, staffData] = await Promise.all([
+          inventoryApi.list({ clinicId: clinic.id, regulatoryClass: 'CONTROLLED', limit: 1000 }),
+          staffApi.list({ clinicId: clinic.id }),
+        ]);
+        setControlledItems(controlledRes.data || []);
+        // Co-signers must have login credentials, so exclude SUPPORT role (who cannot log in)
+        const eligibleStaff = (staffData || []).filter(s => 
+          s.status === 'ACTIVE' && 
+          s.clinicRoles?.some(r => r.role !== 'SUPPORT' && r.status === 'ACTIVE')
+        );
+        setStaffList(eligibleStaff);
+      } catch (err) {
+        console.error('Failed to load validation data', err);
+      }
+    };
+    fetchControlledAndStaff();
+  }, [clinic]);
+
+  const isRxControlled = useCallback((rx: Prescription) => {
+    return (rx.items ?? []).some(rxItem => 
+      controlledItems.some(invItem => 
+        (rxItem.medicineId && invItem.medicineId === rxItem.medicineId) ||
+        (!rxItem.medicineId && invItem.customName?.toLowerCase() === rxItem.customName?.toLowerCase())
+      )
+    );
+  }, [controlledItems]);
 
   const load = useCallback(async () => {
     if (!clinic) return;
@@ -156,14 +193,37 @@ export default function DispensingPage() {
               </div>
 
               {/* Actions */}
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                {(rx.status === 'ACTIVE' || rx.status === 'NOT_ARRIVED') && isRxControlled(rx) && (
+                  <div className="w-full flex flex-col gap-1 mb-2">
+                    <label className="text-[10px] font-bold text-primary-600 dark:text-primary-400">Co-Signer Required (Controlled Drug)</label>
+                    <select
+                      value={selectedSignatories[rx.id] || ''}
+                      onChange={(e) => setSelectedSignatories(prev => ({ ...prev, [rx.id]: e.target.value }))}
+                      className="text-xs border border-border rounded-lg px-2.5 py-2 bg-surface-card text-text-primary focus:ring-1 focus:ring-primary-500 outline-none max-w-xs"
+                    >
+                      <option value="">-- Select Co-Signer --</option>
+                      {staffList.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 {(rx.status === 'ACTIVE' || rx.status === 'NOT_ARRIVED') && (
                   <button
                     disabled={busyId === rx.id}
-                    onClick={() => act(rx.id, () => prescriptionApi.dispense(rx.id, (rx.items ?? []).map(i => ({
-                      prescriptionItemId: i.id,
-                      quantity: i.quantity,
-                    }))), rx.id)}
+                    onClick={() => {
+                      const requiresSignatory = isRxControlled(rx);
+                      const signatoryId = selectedSignatories[rx.id];
+                      if (requiresSignatory && !signatoryId) {
+                        setError('A co-signer (second signatory) is required to dispense controlled medications.');
+                        return;
+                      }
+                      act(rx.id, () => prescriptionApi.dispense(rx.id, (rx.items ?? []).map(i => ({
+                        prescriptionItemId: i.id,
+                        quantity: i.quantity,
+                      })), signatoryId), rx.id);
+                    }}
                     className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-2 rounded-lg"
                   >
                     {busyId === rx.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackageCheck className="w-3.5 h-3.5" />}

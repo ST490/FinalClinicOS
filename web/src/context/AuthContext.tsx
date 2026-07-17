@@ -47,6 +47,7 @@ interface AuthContextType {
 
   /** Real API login */
   login: (email: string, password: string) => Promise<any>;
+  verify2FALogin: (tempToken: string, code: string) => Promise<void>;
   register: (input: { email: string; phone?: string; password: string; name: string; orgName: string; country: string }) => Promise<void>;
   acceptInvite: (input: { token: string; password: string; name: string }) => Promise<void>;
   logout: () => void;
@@ -256,11 +257,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Switch clinic ──
   const switchClinic = useCallback(async (c: AuthClinic | null) => {
-    setClinic(c);
     try {
       const tokens = await authApi.switchClinic(c ? c.id : null);
       localStorage.setItem('accessToken', tokens.accessToken);
-      localStorage.setItem('refreshToken', tokens.refreshToken);
+      if (tokens.refreshToken) {
+        localStorage.setItem('refreshToken', tokens.refreshToken);
+      }
 
       // Re-fetch user details to update roles/context for the switched clinic context
       const me = await authApi.me();
@@ -276,6 +278,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         roleLabel: ROLE_LABELS[primaryRole] || primaryRole,
         isOrgOwner: me.isOrgOwner,
       });
+      
+      // Update clinic state AFTER user and token storage updates are complete
+      setClinic(c);
     } catch (e) {
       console.error('Failed to switch clinic context on server:', e);
     }
@@ -348,6 +353,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const verify2FALogin = useCallback(async (tempToken: string, code: string) => {
+    const result = await authApi.verify2FALogin(tempToken, code);
+    const { accessToken, refreshToken } = result.tokens;
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+
+    const primaryRole: UserRole = result.user.isOrgOwner ? 'MASTER' : (result.user.roles[0]?.role ?? 'RECEPTIONIST');
+    const u: AuthUser = {
+      id: result.user.id,
+      name: result.user.name,
+      email: result.user.email ?? '',
+      role: primaryRole,
+      roleLabel: ROLE_LABELS[primaryRole] || 'Staff',
+      isOrgOwner: result.user.isOrgOwner,
+    };
+    setUser(u);
+
+    if ((result.user as any).orgName) {
+      setOrganization({ id: result.user.orgId, name: (result.user as any).orgName });
+    } else {
+      try {
+        const orgData = await authApi.getOrg(result.user.orgId);
+        setOrganization({ id: orgData.id, name: orgData.name });
+      } catch {
+        setOrganization({ id: result.user.orgId, name: 'Careme' });
+      }
+    }
+
+    try {
+      const apiClinics = await authApi.getClinics();
+      const mapped: AuthClinic[] = apiClinics.map((c) => ({
+        id: c.id,
+        name: c.name,
+        orgId: c.orgId,
+      }));
+      setClinics(mapped);
+      setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));
+    } catch {
+      // Non-fatal
+    }
+  }, []);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -357,6 +404,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!user,
       isLoading,
       login,
+      verify2FALogin,
       register,
       acceptInvite,
       logout,

@@ -124,12 +124,13 @@ export const staffApi = {
   },
 };
 
-// A staff member is offboarded when their primary clinic role is DISABLED.
+// A staff member is offboarded when their clinic role is DISABLED (or all clinic roles are DISABLED in All Branches mode).
 export function isOffboarded(m: StaffMember, clinicId?: string): boolean {
-  const role =
-    m.clinicRoles?.find((r) => !clinicId || r.clinicId === clinicId) ??
-    m.clinicRoles?.[0];
-  return role?.status === 'DISABLED' || m.status === 'DISABLED';
+  if (!clinicId) {
+    return m.status === 'DISABLED' || (m.clinicRoles?.length ? m.clinicRoles.every(r => r.status === 'DISABLED') : false);
+  }
+  const role = m.clinicRoles?.find((r) => r.clinicId === clinicId);
+  return role ? role.status === 'DISABLED' : m.status === 'DISABLED';
 }
 
 // Stable sort that keeps offboarded staff at the end (preserving input order within each group).
