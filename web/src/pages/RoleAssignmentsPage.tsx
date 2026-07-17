@@ -117,8 +117,9 @@ export default function RoleAssignmentsPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div>
+    <div className="space-y-6">
+      <div className="space-y-6 animate-fade-in">
+        <div>
         <h1 className="text-xl font-bold text-text-primary flex items-center gap-2">
           <Shield className="w-5.5 h-5.5 text-primary-500" />
           Role Assignments
@@ -205,6 +206,7 @@ export default function RoleAssignmentsPage() {
             </table>
           )}
         </div>
+      </div>
       </div>
 
       {/* Edit modal */}
