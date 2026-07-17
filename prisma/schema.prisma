@@ -17,9 +17,9 @@ generator client {
 }
 
 datasource db {
-  provider     = "postgresql"
-  url          = env("DATABASE_URL")
-  directUrl    = env("DIRECT_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,14 +47,14 @@ enum UserStatus {
 }
 
 enum UserRoleType {
-  MASTER        // Org-level owner (chain/company) — set via User.isOrgOwner, not UserClinicRole
-  SUB_MASTER    // Clinic-level owner
+  MASTER // Org-level owner (chain/company) — set via User.isOrgOwner, not UserClinicRole
+  SUB_MASTER // Clinic-level owner
   DOCTOR
   NURSE
   PHARMACIST
   RECEPTIONIST
-  HR            // Human Resources — staff management, attendance, payroll
-  SUPPORT       // Non-clinical support staff (lab tech, accountant, cleaner, security...) — no login
+  HR // Human Resources — staff management, attendance, payroll
+  SUPPORT // Non-clinical support staff (lab tech, accountant, cleaner, security...) — no login
 }
 
 enum AppointmentType {
@@ -91,25 +91,25 @@ enum StockMovementType {
 
 enum InventoryTrackingType {
   LOT_BATCH // expiry-sensitive: pharma, vaccines, reagents — needs FEFO + batch
-  SERIAL    // unit-unique, high value: implants, prosthetics, equipment
-  BULK      // quantity-only consumables: gloves, gauze, PPE, linens
+  SERIAL // unit-unique, high value: implants, prosthetics, equipment
+  BULK // quantity-only consumables: gloves, gauze, PPE, linens
 }
 
 enum InventoryRegulatoryClass {
-  STANDARD   // ordinary stock
+  STANDARD // ordinary stock
   CONTROLLED // narcotics/scheduled — dual sign-off + audit (its own mini-subsystem)
   COLD_CHAIN // temperature-sensitive handling
 }
 
 enum InventoryCostType {
   CHARGEABLE // tied to a patient encounter → integrate with billing
-  OVERHEAD   // general/consumable stock → cost-center only
+  OVERHEAD // general/consumable stock → cost-center only
 }
 
 enum InventoryStockingLevel {
-  CENTRAL      // central store / warehouse
-  DEPARTMENT   // unit-level stock (floor, OR, ER, pharmacy par cart)
-  CONSIGNMENT  // vendor-owned until used (expensive implants)
+  CENTRAL // central store / warehouse
+  DEPARTMENT // unit-level stock (floor, OR, ER, pharmacy par cart)
+  CONSIGNMENT // vendor-owned until used (expensive implants)
 }
 
 enum InventoryClinicalCategory {
@@ -205,18 +205,19 @@ enum EmploymentType {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Organization {
-  id        String     @id @default(uuid())
-  name      String
-  country   String     // ISO country code
-  plan      String?    @default("basic")
-  status    OrgStatus  @default(PENDING)
-  logoUrl   String?
-  metadata  Json?      // Flexible field for additional org data
+  id       String    @id @default(uuid())
+  name     String
+  country  String // ISO country code
+  plan     String?   @default("basic")
+  status   OrgStatus @default(PENDING)
+  logoUrl  String?
+  metadata Json? // Flexible field for additional org data
 
   // Relations
-  clinics   Clinic[]
-  users     User[]
-  auditLogs AuditLog[]
+  clinics          Clinic[]
+  users            User[]
+  auditLogs        AuditLog[]
+  staffCredentials StaffCredential[]
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -230,59 +231,60 @@ model Organization {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Clinic {
-  id              String        @id @default(uuid())
-  orgId           String        @map("org_id")
-  name            String
-  address         String?
-  city            String?
-  state           String?
-  country         String        @default("IN") @map("country")
-  postalCode      String?       @map("postal_code")
-  phone           String?
-  email           String?
-  timezone        String        @default("Asia/Kolkata")
-  currency        String        @default("INR")
-  locale          String        @default("en-IN") @map("locale")
+  id         String  @id @default(uuid())
+  orgId      String  @map("org_id")
+  name       String
+  address    String?
+  city       String?
+  state      String?
+  country    String  @default("IN") @map("country")
+  postalCode String? @map("postal_code")
+  phone      String?
+  email      String?
+  timezone   String  @default("Asia/Kolkata")
+  currency   String  @default("INR")
+  locale     String  @default("en-IN") @map("locale")
 
   // Medicine DB for this clinic
-  medicineDbCountry String?     @map("medicine_db_country")
+  medicineDbCountry String? @map("medicine_db_country")
 
   // White-label branding
-  logoUrl         String?       @map("logo_url")
-  bannerUrl       String?       @map("banner_url")
-  accentColor     String?       @map("accent_color")
+  logoUrl     String? @map("logo_url")
+  bannerUrl   String? @map("banner_url")
+  accentColor String? @map("accent_color")
 
   // Landing page slug
-  landingPageSlug String?       @map("landing_page_slug")
+  landingPageSlug String? @map("landing_page_slug")
 
   // Working hours (JSON for flexibility)
-  workingHours    Json?        @map("working_hours")
+  workingHours Json? @map("working_hours")
 
-  status          ClinicStatus  @default(ACTIVE)
+  status ClinicStatus @default(ACTIVE)
 
   // Relations
-  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  users           UserClinicRole[]
-  patients        Patient[]
-  appointments    Appointment[]
-  inventoryItems  InventoryItem[]
-  prescriptions   Prescription[]
-  dues            Due[]
-  reminders       Reminder[]
-  attendance      StaffAttendance[]
-  schedules       StaffSchedule[]
-  auditLogs       AuditLog[]
-  stockMovements  StockMovement[]
-  invites        Invite[]
-  payrolls       Payroll[]
-  leaveRequests  LeaveRequest[]
+  org              Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users            UserClinicRole[]
+  patients         Patient[]
+  appointments     Appointment[]
+  inventoryItems   InventoryItem[]
+  prescriptions    Prescription[]
+  dues             Due[]
+  reminders        Reminder[]
+  attendance       StaffAttendance[]
+  schedules        StaffSchedule[]
+  staffCredentials StaffCredential[]
+  auditLogs        AuditLog[]
+  stockMovements   StockMovement[]
+  invites          Invite[]
+  payrolls         Payroll[]
+  leaveRequests    LeaveRequest[]
 
   // Soft delete
-  deletedAt       DateTime?     @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
   // Timestamps
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([orgId])
   @@index([status])
@@ -294,56 +296,56 @@ model Clinic {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id            String      @id @default(uuid())
-  orgId         String      @map("org_id")
-  email         String?     @unique // Nullable for phone-only accounts
-  phone         String?     @unique
-  passwordHash  String?     @map("password_hash")
-  name          String
-  avatarUrl     String?     @map("avatar_url")
+  id           String  @id @default(uuid())
+  orgId        String  @map("org_id")
+  email        String? @unique // Nullable for phone-only accounts
+  phone        String? @unique
+  passwordHash String? @map("password_hash")
+  name         String
+  avatarUrl    String? @map("avatar_url")
 
   // Org-level flag — true = this user is the Master/owner of this org
   // MASTER role is granted via this flag, NOT via UserClinicRole
   // This bypasses clinic-level checks in RBAC (can access all clinics in org)
-  isOrgOwner    Boolean     @default(false) @map("is_org_owner")
+  isOrgOwner Boolean @default(false) @map("is_org_owner")
 
   // 2FA (⚠️ twoFactorSecret MUST be encrypted at rest — use AES-256 or similar.
-// A plaintext TOTP secret means anyone with DB access can generate valid 2FA codes.)
-  twoFactorEnabled Boolean   @default(false) @map("two_factor_enabled")
-  twoFactorSecret  String?  @map("two_factor_secret")
+  // A plaintext TOTP secret means anyone with DB access can generate valid 2FA codes.)
+  twoFactorEnabled Boolean @default(false) @map("two_factor_enabled")
+  twoFactorSecret  String? @map("two_factor_secret")
 
   // Password reset (token is hashed, not plaintext)
-  passwordResetToken    String?   @map("password_reset_token") // Hash of reset token
-  passwordResetExpiry   DateTime? @map("password_reset_expiry")
+  passwordResetToken  String?   @map("password_reset_token") // Hash of reset token
+  passwordResetExpiry DateTime? @map("password_reset_expiry")
 
-  status        UserStatus  @default(PENDING)
+  status UserStatus @default(PENDING)
 
   // Last login tracking
-  lastLoginAt   DateTime?   @map("last_login_at")
+  lastLoginAt DateTime? @map("last_login_at")
 
   // Token rotation tracking (for refresh token family detection)
   lastRefreshTokenId String? @map("last_refresh_token_id")
 
   // Relations
-  org           Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  clinicRoles   UserClinicRole[]
-  doctorVisits  PatientVisit[] @relation("DoctorVisits")
-  createdVisits PatientVisit[] @relation("CreatedVisits")
-  doctorAppointments Appointment[] @relation("DoctorAppointments")
-  createdAppointments  Appointment[] @relation("CreatedByAppointments")
-  prescriptions Prescription[]
-  stockMovements StockMovement[]
-  dues          Due[]
-  attendance    StaffAttendance[]
-  schedules     StaffSchedule[]
-  auditLogs     AuditLog[]
-  payrolls      Payroll[]
-  leaveRequests LeaveRequest[]
-  leaveReviews  LeaveRequest[] @relation("LeaveReviewer")
+  org                 Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clinicRoles         UserClinicRole[]
+  doctorVisits        PatientVisit[]    @relation("DoctorVisits")
+  createdVisits       PatientVisit[]    @relation("CreatedVisits")
+  doctorAppointments  Appointment[]     @relation("DoctorAppointments")
+  createdAppointments Appointment[]     @relation("CreatedByAppointments")
+  prescriptions       Prescription[]
+  stockMovements      StockMovement[]
+  dues                Due[]
+  attendance          StaffAttendance[]
+  schedules           StaffSchedule[]
+  auditLogs           AuditLog[]
+  payrolls            Payroll[]
+  leaveRequests       LeaveRequest[]
+  leaveReviews        LeaveRequest[]    @relation("LeaveReviewer")
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([orgId])
   @@index([status])
@@ -355,33 +357,33 @@ model User {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model UserClinicRole {
-  id        String        @id @default(uuid())
-  userId    String        @map("user_id")
-  clinicId  String        @map("clinic_id")
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  clinicId  String       @map("clinic_id")
   role      UserRoleType
-  isPrimary Boolean       @default(false) @map("is_primary")
-  status    UserStatus    @default(ACTIVE)
+  isPrimary Boolean      @default(false) @map("is_primary")
+  status    UserStatus   @default(ACTIVE)
 
   // Non-clinical department for SUPPORT staff (Production, Housekeeping, custom…)
-  department String?       @map("department")
+  department String? @map("department")
 
   // Payroll base rate. Column is `salary`; treated as the per-period base
   // (monthly amount / daily rate / hourly rate depending on wageType).
-  salary     Decimal?       @db.Decimal(12, 2) @map("salary")
+  salary Decimal? @map("salary") @db.Decimal(12, 2)
 
   // HR attributes (per clinic — a person may differ across clinics)
-  designation     String?          @map("designation")
-  wageType        WageType         @default(MONTHLY) @map("wage_type")
-  shiftType       ShiftType?       @map("shift_type")
-  employmentType  EmploymentType   @default(PERMANENT) @map("employment_type")
-  joiningDate     DateTime?        @map("joining_date")
+  designation    String?        @map("designation")
+  wageType       WageType       @default(MONTHLY) @map("wage_type")
+  shiftType      ShiftType?     @map("shift_type")
+  employmentType EmploymentType @default(PERMANENT) @map("employment_type")
+  joiningDate    DateTime?      @map("joining_date")
 
   // Permissions can be extended via JSON metadata
-  metadata  Json?
+  metadata Json?
 
   // Relations
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clinic    Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -395,44 +397,63 @@ model UserClinicRole {
   @@map("user_clinic_roles")
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PATIENTS
-// ─────────────────────────────────────────────────────────────────────────────
+model StaffCredential {
+  id        String    @id @default(uuid())
+  clinicId  String    @map("clinic_id")
+  orgId     String    @map("org_id")
+  userId    String
+  type      String // LICENSE | DEA | BOARD | CME | VACCINATION | OTHER
+  number    String?
+  issuedAt  DateTime? @map("issued_at")
+  expiresAt DateTime? @map("expires_at")
+  docUrl    String?   @map("doc_url")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  clinic Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([clinicId])
+  @@index([orgId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("staff_credentials")
+}
 
 model Patient {
-  id            String    @id @default(uuid())
-  clinicId      String    @map("clinic_id")
-  orgId         String    @map("org_id")
+  id       String @id @default(uuid())
+  clinicId String @map("clinic_id")
+  orgId    String @map("org_id")
 
   // Basic info
-  name          String
-  email         String?
-  phone         String?
-  dateOfBirth   DateTime? @map("date_of_birth")
+  name        String
+  email       String?
+  phone       String?
+  dateOfBirth DateTime? @map("date_of_birth")
 
-  gender        Gender?
+  gender Gender?
 
   // Medical info
-  bloodGroup    String?   @map("blood_group")
-  allergies     String[]
-  medicalHistory String?   @map("medical_history")
+  bloodGroup     String?  @map("blood_group")
+  allergies      String[]
+  medicalHistory String?  @map("medical_history")
 
   // Contact info
-  address       String?
-  city          String?
-  state         String?
-  postalCode    String?   @map("postal_code")
-  country       String?   @default("IN")
+  address    String?
+  city       String?
+  state      String?
+  postalCode String? @map("postal_code")
+  country    String? @default("IN")
 
   // Tags for segmentation
-  tags          String[]
+  tags String[]
 
   // Consent tracking
   whatsappConsent Boolean @default(false) @map("whatsapp_consent")
   smsConsent      Boolean @default(false) @map("sms_consent")
 
   // Relations
-  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic        Clinic         @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   visits        PatientVisit[]
   appointments  Appointment[]
   prescriptions Prescription[]
@@ -440,12 +461,12 @@ model Patient {
   reminders     Reminder[]
 
   // Soft delete
-  deletedAt     DateTime? @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
   // Timestamps
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  createdById   String?   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String?  @map("created_by_id")
 
   @@index([clinicId])
   @@index([orgId])
@@ -457,36 +478,48 @@ model Patient {
 // PATIENT VISITS
 // ─────────────────────────────────────────────────────────────────────────────
 
+enum VisitStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model PatientVisit {
-  id        String   @id @default(uuid())
-  patientId String   @map("patient_id")
-  clinicId  String   @map("clinic_id")
-  orgId     String   @map("org_id")
+  id        String @id @default(uuid())
+  patientId String @map("patient_id")
+  clinicId  String @map("clinic_id")
+  orgId     String @map("org_id")
 
   // Visit details
   visitDate DateTime @default(now()) @map("visit_date")
-  type     String?
+  type      String?
 
   // Vitals (flexible JSON)
-  vitals    Json?
+  vitals Json?
 
   // Clinical notes
   chiefComplaint String? @map("chief_complaint")
   diagnosis      String?
   notes          String?
 
+  // Lifecycle status — was missing; visits had no status field until now.
+  status VisitStatus @default(COMPLETED)
+
+  deletedAt DateTime? @map("deleted_at")
+
   // Doctor
-  doctorId       String   @map("doctor_id")
+  doctorId String @map("doctor_id")
 
   // Who created this record
-  createdById    String   @map("created_by_id")
+  createdById String @map("created_by_id")
 
   // Relations
-  patient        Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor         User    @relation("DoctorVisits", fields: [doctorId], references: [id])
-  createdBy     User    @relation("CreatedVisits", fields: [createdById], references: [id])
+  patient       Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User           @relation("DoctorVisits", fields: [doctorId], references: [id])
+  createdBy     User           @relation("CreatedVisits", fields: [createdById], references: [id])
   prescriptions Prescription[]
-  appointments   Appointment[]
+  appointments  Appointment[]
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -494,7 +527,7 @@ model PatientVisit {
 
   @@index([patientId])
   @@index([clinicId])
-  @@index([orgId])        // Index for org-wide queries
+  @@index([orgId]) // Index for org-wide queries
   @@index([doctorId])
   @@index([visitDate])
   @@map("patient_visits")
@@ -505,49 +538,49 @@ model PatientVisit {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Appointment {
-  id            String            @id @default(uuid())
-  clinicId      String            @map("clinic_id")
-  orgId         String            @map("org_id")
-  patientId     String            @map("patient_id")
-  doctorId      String            @map("doctor_id")
+  id        String @id @default(uuid())
+  clinicId  String @map("clinic_id")
+  orgId     String @map("org_id")
+  patientId String @map("patient_id")
+  doctorId  String @map("doctor_id")
 
   // Scheduling
-  slotStart     DateTime          @map("slot_start")
-  slotEnd       DateTime          @map("slot_end")
-  type          AppointmentType   @default(SCHEDULED)
-  status        AppointmentStatus  @default(BOOKED)
+  slotStart DateTime          @map("slot_start")
+  slotEnd   DateTime          @map("slot_end")
+  type      AppointmentType   @default(SCHEDULED)
+  status    AppointmentStatus @default(BOOKED)
 
   // Visit reference (FIXED: added proper relation)
-  visitId       String?           @map("visit_id")
-  visit         PatientVisit?     @relation(fields: [visitId], references: [id], onDelete: SetNull)
+  visitId String?       @map("visit_id")
+  visit   PatientVisit? @relation(fields: [visitId], references: [id], onDelete: SetNull)
 
   // Booking details
-  notes         String?
-  isNewPatient  Boolean           @default(false) @map("is_new_patient")
+  notes        String?
+  isNewPatient Boolean @default(false) @map("is_new_patient")
 
   // Categorization: first-time / returning / free health-checkup
-  category      AppointmentCategory @default(RETURNING) @map("category")
+  category AppointmentCategory @default(RETURNING) @map("category")
 
   // Queue position for walk-ins
-  queuePosition Int?              @map("queue_position")
+  queuePosition Int? @map("queue_position")
 
   // Who created this
-  createdById   String            @map("created_by_id")
+  createdById String @map("created_by_id")
 
   // Relations
-  clinic        Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient       Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor        User             @relation("DoctorAppointments", fields: [doctorId], references: [id])
-  createdBy     User             @relation("CreatedByAppointments", fields: [createdById], references: [id])
-  reminders     Reminder[]
+  clinic    Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient   Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor    User       @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  createdBy User       @relation("CreatedByAppointments", fields: [createdById], references: [id])
+  reminders Reminder[]
 
   // Soft delete
-  cancelledAt   DateTime?        @map("cancelled_at")
-  cancelledById String?          @map("cancelled_by_id")
+  cancelledAt   DateTime? @map("cancelled_at")
+  cancelledById String?   @map("cancelled_by_id")
 
   // Timestamps
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Double-booking prevention via raw SQL partial index — see migration 00003_appointments_fix
   // The partial index allows re-booking cancelled slots:
@@ -567,20 +600,20 @@ model Appointment {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model MedicineMaster {
-  id            String   @id @default(uuid())
-  country       String
+  id      String @id @default(uuid())
+  country String
 
   // Drug info
-  genericName   String   @map("generic_name")
-  brandNames    String[] @map("brand_names")
-  composition   String?
-  strength      String?
+  genericName String   @map("generic_name")
+  brandNames  String[] @map("brand_names")
+  composition String?
+  strength    String?
 
-  dosages       Json     // e.g., ["tablet", "capsule", "syrup"]
+  dosages Json // e.g., ["tablet", "capsule", "syrup"]
 
   // Category
-  category      String?
-  subCategory   String?  @map("sub_category")
+  category    String?
+  subCategory String? @map("sub_category")
 
   requiresPrescription Boolean @default(false) @map("requires_prescription")
 
@@ -589,8 +622,8 @@ model MedicineMaster {
   prescriptionItems PrescriptionItem[]
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([country])
   @@index([genericName])
@@ -602,14 +635,14 @@ model MedicineMaster {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model InventoryItem {
-  id            String    @id @default(uuid())
-  clinicId      String    @map("clinic_id")
-  orgId         String    @map("org_id")
+  id       String @id @default(uuid())
+  clinicId String @map("clinic_id")
+  orgId    String @map("org_id")
 
   // Reference to master medicine (nullable for custom items)
-  medicineId    String?   @map("medicine_id")
-  customName    String?   @map("custom_name")
-  customBrand   String?   @map("custom_brand")
+  medicineId  String? @map("medicine_id")
+  customName  String? @map("custom_name")
+  customBrand String? @map("custom_brand")
 
   // ⚠️  APP-LAYER VALIDATION REQUIRED:
   // Both medicineId and customName are nullable, but an item cannot exist
@@ -617,48 +650,48 @@ model InventoryItem {
   // CHECK (medicine_id IS NOT NULL OR custom_name IS NOT NULL)
 
   // Batch tracking
-  batchNo       String?   @map("batch_no")
-  expiryDate    DateTime? @map("expiry_date")
+  batchNo    String?   @map("batch_no")
+  expiryDate DateTime? @map("expiry_date")
 
   // Stock levels
-  quantity      Int       @default(0)
-  reorderThreshold Int    @default(10) @map("reorder_threshold")
+  quantity         Int @default(0)
+  reorderThreshold Int @default(10) @map("reorder_threshold")
 
   // Pricing
-  unitPrice     Decimal   @db.Decimal(12, 2) @map("unit_price")
-  mrp           Decimal?  @db.Decimal(12, 2)
+  unitPrice Decimal  @map("unit_price") @db.Decimal(12, 2)
+  mrp       Decimal? @db.Decimal(12, 2)
 
   // Item details
-  dosageForm    String?   @map("dosage_form")
-  strength      String?   @map("strength")
-  ingredients   String?
+  dosageForm  String? @map("dosage_form")
+  strength    String? @map("strength")
+  ingredients String?
 
   // ── Classification (multi-attribute; see Inventory* enums above) ──
-  trackingType    InventoryTrackingType    @default(BULK)      @map("tracking_type")
-  regulatoryClass InventoryRegulatoryClass @default(STANDARD)  @map("regulatory_class")
-  costType        InventoryCostType        @default(OVERHEAD)  @map("cost_type")
-  stockingLevel   InventoryStockingLevel   @default(CENTRAL)   @map("stocking_level")
-  clinicalCategory InventoryClinicalCategory @default(PHARMA)  @map("clinical_category")
+  trackingType     InventoryTrackingType     @default(BULK) @map("tracking_type")
+  regulatoryClass  InventoryRegulatoryClass  @default(STANDARD) @map("regulatory_class")
+  costType         InventoryCostType         @default(OVERHEAD) @map("cost_type")
+  stockingLevel    InventoryStockingLevel    @default(CENTRAL) @map("stocking_level")
+  clinicalCategory InventoryClinicalCategory @default(PHARMA) @map("clinical_category")
 
   // Tracking-type-specific
-  serialNo         String? @map("serial_no")          // SERIAL items
-  consignmentOwner String? @map("consignment_owner")  // CONSIGNMENT items
+  serialNo         String? @map("serial_no") // SERIAL items
+  consignmentOwner String? @map("consignment_owner") // CONSIGNMENT items
 
   // Pricing — unitPrice is the BUY/cost price; sellingPrice is the SELL price.
-  sellingPrice     Decimal? @db.Decimal(12, 2) @map("selling_price")
+  sellingPrice Decimal? @map("selling_price") @db.Decimal(12, 2)
 
   // Soft delete
-  deletedAt     DateTime? @map("deleted_at")
+  deletedAt DateTime? @map("deleted_at")
 
   // Relations
-  clinic        Clinic    @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  medicine      MedicineMaster? @relation(fields: [medicineId], references: [id])
+  clinic         Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  medicine       MedicineMaster? @relation(fields: [medicineId], references: [id])
   stockMovements StockMovement[]
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  createdById   String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdById String   @map("created_by_id")
 
   @@index([clinicId])
   @@index([medicineId])
@@ -676,38 +709,38 @@ model InventoryItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model StockMovement {
-  id              String            @id @default(uuid())
-  clinicId        String            @map("clinic_id")
-  orgId           String            @map("org_id")
-  inventoryItemId String            @map("inventory_item_id")
+  id              String @id @default(uuid())
+  clinicId        String @map("clinic_id")
+  orgId           String @map("org_id")
+  inventoryItemId String @map("inventory_item_id")
 
-  type            StockMovementType
-  quantityDelta   Int               @map("quantity_delta")
+  type          StockMovementType
+  quantityDelta Int               @map("quantity_delta")
 
   // Reference
-  referenceType   String?           @map("reference_type")
-  referenceId     String?           @map("reference_id")
+  referenceType String? @map("reference_type")
+  referenceId   String? @map("reference_id")
 
   // Batch overrides
-  newBatchNo      String?           @map("new_batch_no")
-  newExpiryDate   DateTime?         @map("new_expiry_date")
+  newBatchNo    String?   @map("new_batch_no")
+  newExpiryDate DateTime? @map("new_expiry_date")
 
-  notes           String?
+  notes String?
 
-  performedById   String            @map("performed_by_id")
-  prescriptionId  String?           @map("prescription_id")
+  performedById  String  @map("performed_by_id")
+  prescriptionId String? @map("prescription_id")
 
   // Controlled-substance dual sign-off (second approver)
-  secondSignatoryId String?         @map("second_signatory_id")
+  secondSignatoryId String? @map("second_signatory_id")
 
   // Relations
-  clinic          Clinic          @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  inventoryItem   InventoryItem   @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
-  performedBy     User             @relation(fields: [performedById], references: [id])
-  prescription    Prescription?    @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  clinic        Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  performedBy   User          @relation(fields: [performedById], references: [id])
+  prescription  Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
 
   // Timestamps
-  createdAt       DateTime         @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([clinicId])
   @@index([inventoryItemId])
@@ -722,34 +755,34 @@ model StockMovement {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Prescription {
-  id            String  @id @default(uuid())
-  clinicId      String  @map("clinic_id")
-  orgId         String  @map("org_id")
-  patientId     String  @map("patient_id")
-  doctorId      String  @map("doctor_id")
-  visitId       String? @map("visit_id")
+  id        String  @id @default(uuid())
+  clinicId  String  @map("clinic_id")
+  orgId     String  @map("org_id")
+  patientId String  @map("patient_id")
+  doctorId  String  @map("doctor_id")
+  visitId   String? @map("visit_id")
 
-  notes         String?
-  signature     String?
+  notes     String?
+  signature String?
 
-  status        String  @default("active")
+  status        String    @default("active")
   cancelledAt   DateTime? @map("cancelled_at")
   cancelledById String?   @map("cancelled_by_id")
 
   // Relations
-  clinic        Clinic     @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient       Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor        User       @relation(fields: [doctorId], references: [id])
-  visit         PatientVisit? @relation(fields: [visitId], references: [id])
-  items         PrescriptionItem[]
+  clinic         Clinic             @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient        Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor         User               @relation(fields: [doctorId], references: [id])
+  visit          PatientVisit?      @relation(fields: [visitId], references: [id])
+  items          PrescriptionItem[]
   stockMovements StockMovement[]
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([clinicId])
-  @@index([orgId])        // Index for org-wide queries
+  @@index([orgId]) // Index for org-wide queries
   @@index([patientId])
   @@index([doctorId])
   @@map("prescriptions")
@@ -760,31 +793,31 @@ model Prescription {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model PrescriptionItem {
-  id              String  @id @default(uuid())
-  prescriptionId  String  @map("prescription_id")
+  id             String @id @default(uuid())
+  prescriptionId String @map("prescription_id")
 
-  medicineId      String? @map("medicine_id")
-  customName      String? @map("custom_name")
+  medicineId String? @map("medicine_id")
+  customName String? @map("custom_name")
 
-  dosage          String?
-  frequency       String?
-  duration        String?
-  instructions    String?
+  dosage       String?
+  frequency    String?
+  duration     String?
+  instructions String?
 
-  quantity        Int     @default(1)
-  unitPrice       Decimal? @db.Decimal(12, 2) @map("unit_price")
-  totalPrice      Decimal? @db.Decimal(12, 2) @map("total_price")
+  quantity   Int      @default(1)
+  unitPrice  Decimal? @map("unit_price") @db.Decimal(12, 2)
+  totalPrice Decimal? @map("total_price") @db.Decimal(12, 2)
 
-  dispensed       Boolean @default(false)
-  dispensedQty    Int     @default(0) @map("dispensed_qty")
+  dispensed    Boolean @default(false)
+  dispensedQty Int     @default(0) @map("dispensed_qty")
 
   // Relations
-  prescription    Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
-  medicine        MedicineMaster? @relation(fields: [medicineId], references: [id])
+  prescription Prescription    @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  medicine     MedicineMaster? @relation(fields: [medicineId], references: [id])
 
   // Timestamps
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([prescriptionId])
   @@map("prescription_items")
@@ -795,43 +828,45 @@ model PrescriptionItem {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Due {
-  id              String       @id @default(uuid())
-  clinicId        String       @map("clinic_id")
-  orgId           String       @map("org_id")
-  patientId       String       @map("patient_id")
+  id        String @id @default(uuid())
+  clinicId  String @map("clinic_id")
+  orgId     String @map("org_id")
+  patientId String @map("patient_id")
 
   // FIXED: Added proper relations for optional FKs
-  appointmentId   String?      @map("appointment_id")
-  prescriptionId  String?      @map("prescription_id")
+  appointmentId  String? @map("appointment_id")
+  prescriptionId String? @map("prescription_id")
 
-  totalAmount     Decimal      @db.Decimal(12, 2) @map("total_amount")
-  amountPaid      Decimal      @default(0) @db.Decimal(12, 2) @map("amount_paid")
-  amountDue       Decimal      @db.Decimal(12, 2) @map("amount_due")
+  totalAmount Decimal @map("total_amount") @db.Decimal(12, 2)
+  amountPaid  Decimal @default(0) @map("amount_paid") @db.Decimal(12, 2)
+  amountDue   Decimal @map("amount_due") @db.Decimal(12, 2)
 
-  paymentMethod   PaymentMethod? @map("payment_method")
-  paymentNotes    String?       @map("payment_notes")
+  paymentMethod PaymentMethod? @map("payment_method")
+  paymentNotes  String?        @map("payment_notes")
 
-  status          DueStatus    @default(DUE)
+  status DueStatus @default(DUE)
 
-  recordedById    String       @map("recorded_by_id")
+  dueDate DateTime? @map("due_date")
 
-  waivedAt        DateTime?    @map("waived_at")
-  waivedById      String?      @map("waived_by_id")
-  waiveReason     String?      @map("waive_reason")
+  recordedById String @map("recorded_by_id")
+
+  waivedAt    DateTime? @map("waived_at")
+  waivedById  String?   @map("waived_by_id")
+  waiveReason String?   @map("waive_reason")
 
   // Relations
-  clinic          Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient         Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  recordedBy      User         @relation(fields: [recordedById], references: [id])
+  clinic     Clinic  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient    Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  recordedBy User    @relation(fields: [recordedById], references: [id])
   // Note: appointmentId and prescriptionId are optional informational links.
   // No @relation defined — handled via application-level joins with SetNull behavior.
 
   // Timestamps
-  createdAt       DateTime     @default(now()) @map("created_at")
-  updatedAt       DateTime     @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([clinicId])
-  @@index([orgId])        // Index for org-wide queries
+  @@index([orgId]) // Index for org-wide queries
   @@index([patientId])
   @@index([status])
   @@map("dues")
@@ -842,44 +877,44 @@ model Due {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Reminder {
-  id            String             @id @default(uuid())
-  clinicId      String             @map("clinic_id")
-  orgId         String             @map("org_id")
-  patientId     String             @map("patient_id")
-  appointmentId String?            @map("appointment_id")
+  id            String  @id @default(uuid())
+  clinicId      String  @map("clinic_id")
+  orgId         String  @map("org_id")
+  patientId     String  @map("patient_id")
+  appointmentId String? @map("appointment_id")
 
-  channel       ReminderChannel
+  channel ReminderChannel
 
-  templateId    String             @map("template_id")
-  templateData  Json?              @map("template_data")
+  templateId   String @map("template_id")
+  templateData Json?  @map("template_data")
 
-  scheduledAt   DateTime           @map("scheduled_at")
-  sentAt        DateTime?          @map("sent_at")
-  deliveredAt   DateTime?           @map("delivered_at")
+  scheduledAt DateTime  @map("scheduled_at")
+  sentAt      DateTime? @map("sent_at")
+  deliveredAt DateTime? @map("delivered_at")
 
-  status        ReminderStatus     @default(PENDING)
+  status ReminderStatus @default(PENDING)
 
-  providerMessageId String?        @map("provider_message_id")
-  providerResponse  Json?          @map("provider_response")
-  errorMessage      String?        @map("error_message")
+  providerMessageId String? @map("provider_message_id")
+  providerResponse  Json?   @map("provider_response")
+  errorMessage      String? @map("error_message")
 
-  retryCount    Int     @default(0) @map("retry_count")
-  maxRetries    Int     @default(3)  @map("max_retries")
+  retryCount Int @default(0) @map("retry_count")
+  maxRetries Int @default(3) @map("max_retries")
 
   // Relations (FIXED: Added proper relations)
-  clinic        Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  patient       Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  clinic      Clinic       @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   // No relation for appointmentId - optional link, SetNull behavior:
   // if an appointment is deleted, reminders stay but lose their link
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([clinicId])
-  @@index([orgId])        // Index for org-wide queries
+  @@index([orgId]) // Index for org-wide queries
   @@index([patientId])
   @@index([status])
   @@index([scheduledAt])
@@ -891,28 +926,28 @@ model Reminder {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model StaffAttendance {
-  id         String           @id @default(uuid())
-  clinicId   String           @map("clinic_id")
-  orgId      String           @map("org_id")
-  userId     String           @map("user_id")
-  date       DateTime         @db.Date
+  id       String   @id @default(uuid())
+  clinicId String   @map("clinic_id")
+  orgId    String   @map("org_id")
+  userId   String   @map("user_id")
+  date     DateTime @db.Date
 
-  checkIn    DateTime?        @map("check_in")
-  checkOut   DateTime?        @map("check_out")
+  checkIn  DateTime? @map("check_in")
+  checkOut DateTime? @map("check_out")
 
-  department String?         @map("department")
+  department String? @map("department")
 
-  status     AttendanceStatus @default(PRESENT)
+  status AttendanceStatus @default(PRESENT)
 
-  notes      String?
+  notes String?
 
   // Relations
-  clinic     Clinic           @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Timestamps
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, clinicId, date])
   @@index([clinicId])
@@ -925,41 +960,41 @@ model StaffAttendance {
 // PAYROLL — monthly payslips for non-clinical (SUPPORT) staff
 // ─────────────────────────────────────────────────────────────────────────────
 model Payroll {
-  id        String        @id @default(uuid())
-  clinicId  String        @map("clinic_id")
-  orgId     String        @map("org_id")
-  userId    String        @map("user_id")
+  id       String @id @default(uuid())
+  clinicId String @map("clinic_id")
+  orgId    String @map("org_id")
+  userId   String @map("user_id")
 
   // Pay period, e.g. "2026-07"
-  period    String
+  period String
 
-  daysPresent Int          @default(0) @map("days_present")
-  daysAbsent  Int          @default(0) @map("days_absent")
-  daysLeave   Int          @default(0) @map("days_leave")
-  daysHalfDay Int          @default(0) @map("days_half_day")
+  daysPresent Int @default(0) @map("days_present")
+  daysAbsent  Int @default(0) @map("days_absent")
+  daysLeave   Int @default(0) @map("days_leave")
+  daysHalfDay Int @default(0) @map("days_half_day")
 
-  basic     Decimal       @db.Decimal(12, 2) @map("basic")
-  bonus     Decimal       @db.Decimal(12, 2) @default(0) @map("bonus")
-  deduction Decimal       @db.Decimal(12, 2) @default(0) @map("deduction")
-  net       Decimal       @db.Decimal(12, 2) @map("net")
+  basic     Decimal @map("basic") @db.Decimal(12, 2)
+  bonus     Decimal @default(0) @map("bonus") @db.Decimal(12, 2)
+  deduction Decimal @default(0) @map("deduction") @db.Decimal(12, 2)
+  net       Decimal @map("net") @db.Decimal(12, 2)
 
   // Wage-type-aware payroll extensions
-  wageType      WageType?  @map("wage_type")
-  overtimeHours Decimal?   @db.Decimal(8, 2) @default(0) @map("overtime_hours")
-  overtimePay   Decimal?   @db.Decimal(12, 2) @default(0) @map("overtime_pay")
-  advance       Decimal?   @db.Decimal(12, 2) @default(0) @map("advance")
-  arrears       Decimal?   @db.Decimal(12, 2) @default(0) @map("arrears")
+  wageType      WageType? @map("wage_type")
+  overtimeHours Decimal?  @default(0) @map("overtime_hours") @db.Decimal(8, 2)
+  overtimePay   Decimal?  @default(0) @map("overtime_pay") @db.Decimal(12, 2)
+  advance       Decimal?  @default(0) @map("advance") @db.Decimal(12, 2)
+  arrears       Decimal?  @default(0) @map("arrears") @db.Decimal(12, 2)
 
-  status    PayrollStatus @default(DRAFT)
-  paidAt    DateTime?     @map("paid_at")
+  status PayrollStatus @default(DRAFT)
+  paidAt DateTime?     @map("paid_at")
 
   // Relations
-  clinic    Clinic        @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Timestamps
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, period])
   @@index([clinicId])
@@ -973,31 +1008,31 @@ model Payroll {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model LeaveRequest {
-  id         String      @id @default(uuid())
-  clinicId   String      @map("clinic_id")
-  orgId      String      @map("org_id")
-  userId     String      @map("user_id") // applicant
+  id       String @id @default(uuid())
+  clinicId String @map("clinic_id")
+  orgId    String @map("org_id")
+  userId   String @map("user_id") // applicant
 
-  type       String // free-text leave type (Casual/Sick/Emergency/Paid or custom)
-  fromDate   DateTime    @db.Date @map("from_date")
-  toDate     DateTime    @db.Date @map("to_date")
-  days       Int
-  reason     String?
+  type     String // free-text leave type (Casual/Sick/Emergency/Paid or custom)
+  fromDate DateTime @map("from_date") @db.Date
+  toDate   DateTime @map("to_date") @db.Date
+  days     Int
+  reason   String?
 
-  status     LeaveStatus @default(PENDING)
-  appliedOn  DateTime    @default(now()) @map("applied_on")
+  status    LeaveStatus @default(PENDING)
+  appliedOn DateTime    @default(now()) @map("applied_on")
 
   reviewedById String?   @map("reviewed_by_id")
   reviewedAt   DateTime? @map("reviewed_at")
 
   // Relations
-  clinic     Clinic      @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reviewedBy User?       @relation("LeaveReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  clinic     Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User?  @relation("LeaveReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
   // Timestamps
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([clinicId])
   @@index([orgId])
@@ -1012,34 +1047,36 @@ model LeaveRequest {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model StaffSchedule {
-  id          String   @id @default(uuid())
-  clinicId    String   @map("clinic_id")
-  orgId       String   @map("org_id")
-  userId      String   @map("user_id")
+  id       String @id @default(uuid())
+  clinicId String @map("clinic_id")
+  orgId    String @map("org_id")
+  userId   String @map("user_id")
 
-  dayOfWeek   Int      @map("day_of_week") // 0=Sunday, 6=Saturday
+  dayOfWeek Int @map("day_of_week") // 0=Sunday, 6=Saturday
 
-  startTime   String   @map("start_time")  // "09:00"
-  endTime     String   @map("end_time")    // "17:00"
+  startTime String @map("start_time") // "09:00"
+  endTime   String @map("end_time") // "17:00"
 
-  slotDuration Int     @default(30) @map("slot_duration")
+  slotDuration Int @default(30) @map("slot_duration")
 
-  isActive    Boolean  @default(true) @map("is_active")
+  shiftType ShiftType? @map("shift_type") // per-cell D/N/O override
+
+  isActive Boolean @default(true) @map("is_active")
 
   specificDate DateTime? @map("specific_date") // Override for holidays
 
   // Relations
-  clinic      Clinic   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clinic Clinic @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
+  @@unique([userId, clinicId, dayOfWeek]) // one recurring shift line per weekday
   @@index([clinicId])
   @@index([orgId])
   @@index([userId])
-  @@unique([userId, clinicId, dayOfWeek]) // one recurring shift line per weekday
   @@map("staff_schedules")
 }
 
@@ -1048,30 +1085,30 @@ model StaffSchedule {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  orgId       String   @map("org_id")
-  clinicId    String?  @map("clinic_id")
-  userId      String?  @map("user_id")
+  id       String  @id @default(uuid())
+  orgId    String  @map("org_id")
+  clinicId String? @map("clinic_id")
+  userId   String? @map("user_id")
 
-  action      String
-  entityType  String   @map("entity_type")
-  entityId    String?  @map("entity_id")
+  action     String
+  entityType String  @map("entity_type")
+  entityId   String? @map("entity_id")
 
-  before      Json?
-  after       Json?
+  before Json?
+  after  Json?
 
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
 
-  metadata    Json?
+  metadata Json?
 
   // Relations
-  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  clinic      Clinic?      @relation(fields: [clinicId], references: [id], onDelete: SetNull)
-  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  clinic Clinic?      @relation(fields: [clinicId], references: [id], onDelete: SetNull)
+  user   User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([orgId])
   @@index([clinicId])
@@ -1084,35 +1121,39 @@ model AuditLog {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Invite {
-  id          String    @id @default(uuid())
-  orgId       String    @map("org_id")
-  clinicId    String?   @map("clinic_id") // null for sub-master invites (clinic created first)
+  id       String  @id @default(uuid())
+  orgId    String  @map("org_id")
+  clinicId String? @map("clinic_id") // null for sub-master invites (clinic created first)
 
-  email       String?   @map("email")
-  phone       String?   @map("phone")
+  email String? @map("email")
+  phone String? @map("phone")
 
   // Token is hashed before storage
-  tokenHash   String    @unique @map("token_hash")
+  tokenHash String @unique @map("token_hash")
+
+  // Raw token, kept so the pending-invites list can surface it for manual
+  // (dev) copy. Empty for invites created before this column existed.
+  token String? @map("token")
 
   // Role to assign when accepted
-  role        UserRoleType @map("role")
+  role UserRoleType @map("role")
 
   // User who sent the invite
-  invitedById String    @map("invited_by_id")
+  invitedById String @map("invited_by_id")
 
   // Relations
-  clinic       Clinic?   @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  clinic Clinic? @relation(fields: [clinicId], references: [id], onDelete: Cascade)
 
   // Status
-  status      String    @default("pending") // pending, accepted, expired, cancelled
-  expiresAt   DateTime  @map("expires_at")
+  status    String   @default("pending") // pending, accepted, expired, cancelled
+  expiresAt DateTime @map("expires_at")
 
   // Link to created user after acceptance
-  acceptedById String?  @map("accepted_by_id")
+  acceptedById String? @map("accepted_by_id")
 
   // Timestamps
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([orgId])
   @@index([tokenHash])
@@ -1126,17 +1167,17 @@ model Invite {
 
 // ⚠️ SECURITY: stores HASH of token, not raw value. Compare hash-to-hash on validation.
 model RefreshToken {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  tokenHash   String   @unique @map("token_hash") // SHA-256 hash of the actual token
-  familyId    String   @map("family_id") // Same family = same login session, for rotation detection
-  expiresAt   DateTime @map("expires_at")
-  revokedAt   DateTime? @map("revoked_at")
-  deviceInfo  String?  @map("device_info")
-  ipAddress   String?  @map("ip_address")
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @unique @map("token_hash") // SHA-256 hash of the actual token
+  familyId   String    @map("family_id") // Same family = same login session, for rotation detection
+  expiresAt  DateTime  @map("expires_at")
+  revokedAt  DateTime? @map("revoked_at")
+  deviceInfo String?   @map("device_info")
+  ipAddress  String?   @map("ip_address")
 
   // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@index([expiresAt])
@@ -1148,24 +1189,24 @@ model RefreshToken {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model ApiKey {
-  id          String    @id @default(uuid())
-  orgId       String    @map("org_id")
-  clinicId    String?   @map("clinic_id")
+  id       String  @id @default(uuid())
+  orgId    String  @map("org_id")
+  clinicId String? @map("clinic_id")
 
-  name        String
-  keyHash     String    @map("key_hash")
-  keyPrefix   String    @map("key_prefix")
+  name      String
+  keyHash   String @map("key_hash")
+  keyPrefix String @map("key_prefix")
 
   permissions Json
 
-  expiresAt   DateTime? @map("expires_at")
-  revokedAt   DateTime? @map("revoked_at")
+  expiresAt DateTime? @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
 
-  lastUsedAt  DateTime? @map("last_used_at")
+  lastUsedAt DateTime? @map("last_used_at")
 
   // Timestamps
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([orgId])
   @@map("api_keys")

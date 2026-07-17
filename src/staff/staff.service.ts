@@ -1,5 +1,7 @@
-import { Prisma, UserRoleType } from '@prisma/client';
+import { Prisma, UserRoleType, UserStatus } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { ForbiddenError } from '../common/errors.js';
+import { auditService } from '../audit/audit.service.js';
 import {
   InviteStaffInput,
   AcceptInviteInput,
@@ -25,6 +27,7 @@ export class StaffService {
         email: input.email,
         phone: input.phone,
         tokenHash,
+        token,
         role: input.role,
         invitedById: input.invitedById,
         status: 'pending',
@@ -104,6 +107,8 @@ export class StaffService {
         status: 'ACTIVE',
         department: input.department || null,
         salary: input.salary != null ? new Prisma.Decimal(input.salary) : null,
+        wageType: input.wageType ?? 'MONTHLY',
+        employmentType: input.employmentType ?? 'PERMANENT',
       },
       include: { clinic: { select: { name: true } } },
     });
@@ -114,10 +119,13 @@ export class StaffService {
     };
   }
 
-  async searchStaff(clinicId?: string): Promise<StaffResponse[]> {
+  async searchStaff(clinicId?: string, includeInactive = false): Promise<StaffResponse[]> {
+    const roleStatus: UserStatus | { in: UserStatus[] } = includeInactive
+      ? { in: ['ACTIVE', 'DISABLED'] }
+      : 'ACTIVE';
     const where = clinicId
-      ? { clinicRoles: { some: { clinicId, status: 'ACTIVE' as const } } }
-      : undefined;
+      ? { clinicRoles: { some: { clinicId, status: roleStatus } } }
+      : { clinicRoles: { some: { status: roleStatus } } };
 
     const users = await prisma.user.findMany({
       where: { ...where, status: { not: 'PENDING' as const } },
@@ -146,7 +154,7 @@ export class StaffService {
       phone: inv.phone,
       role: inv.role,
       status: inv.status,
-      token: inv.tokenHash, // We return the hash as an identifier in list
+      token: inv.token, // raw token for manual (dev) copy — verifiable by accept-invite
       clinicName: inv.clinic?.name || 'All Clinics',
       createdAt: inv.createdAt,
     }));
@@ -172,7 +180,15 @@ export class StaffService {
     };
   }
 
-  async updateRole(userId: string, input: UpdateStaffRoleInput): Promise<ClinicRoleResponse> {
+  private async assertSameOrg(userId: string, orgId: string): Promise<void> {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { orgId: true } });
+    if (!user || user.orgId !== orgId) {
+      throw new ForbiddenError('User does not belong to your organization');
+    }
+  }
+
+  async updateRole(userId: string, input: UpdateStaffRoleInput, orgId: string, actorId?: string): Promise<ClinicRoleResponse> {
+    await this.assertSameOrg(userId, orgId);
     const data: any = { role: input.role as UserRoleType, isPrimary: input.isPrimary };
     if (input.designation !== undefined) data.designation = input.designation;
     if (input.wageType !== undefined) data.wageType = input.wageType;
@@ -180,6 +196,7 @@ export class StaffService {
     if (input.shiftType !== undefined) data.shiftType = input.shiftType;
     if (input.employmentType !== undefined) data.employmentType = input.employmentType;
     if (input.joiningDate !== undefined) data.joiningDate = input.joiningDate;
+    if (input.department !== undefined) data.department = input.department;
 
     const role = await prisma.userClinicRole.upsert({
       where: { userId_clinicId: { userId, clinicId: input.clinicId } },
@@ -194,10 +211,22 @@ export class StaffService {
       update: data,
       include: { clinic: { select: { name: true } } },
     });
+
+    await auditService.log({
+      orgId,
+      clinicId: input.clinicId,
+      userId: actorId,
+      action: 'UPDATE',
+      entityType: 'STAFF_ROLE',
+      entityId: `${userId}:${input.clinicId}`,
+      after: this.formatRole(role),
+    }).catch(() => {});
+
     return this.formatRole(role);
   }
 
-  async deactivateStaff(userId: string, clinicId?: string): Promise<void> {
+  async deactivateStaff(userId: string, clinicId?: string, orgId?: string, actorId?: string): Promise<void> {
+    if (orgId) await this.assertSameOrg(userId, orgId);
     if (clinicId) {
       await prisma.userClinicRole.updateMany({
         where: { userId, clinicId },
@@ -205,6 +234,17 @@ export class StaffService {
       });
     } else {
       await prisma.user.update({ where: { id: userId }, data: { status: 'DISABLED' } });
+    }
+
+    if (orgId) {
+      await auditService.log({
+        orgId,
+        clinicId,
+        userId: actorId,
+        action: 'DEACTIVATE',
+        entityType: 'STAFF',
+        entityId: userId,
+      }).catch(() => {});
     }
   }
 
@@ -223,12 +263,14 @@ export class StaffService {
         startTime: input.startTime,
         endTime: input.endTime,
         slotDuration: input.slotDuration || 30,
+        shiftType: input.shiftType ?? null,
         isActive: input.isActive !== false,
       },
       update: {
         startTime: input.startTime,
         endTime: input.endTime,
         slotDuration: input.slotDuration || 30,
+        shiftType: input.shiftType ?? null,
         isActive: input.isActive !== false,
       },
       include: { clinic: { select: { name: true } } },
@@ -267,6 +309,7 @@ export class StaffService {
       status: user.status,
       isOrgOwner: user.isOrgOwner,
       createdAt: user.createdAt,
+      dateOfBirth: user.dateOfBirth ?? null,
     };
   }
 
@@ -299,6 +342,7 @@ export class StaffService {
       endTime: schedule.endTime,
       slotDuration: schedule.slotDuration,
       isActive: schedule.isActive,
+      shiftType: schedule.shiftType ?? null,
       specificDate: schedule.specificDate,
     };
   }

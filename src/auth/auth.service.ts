@@ -92,8 +92,9 @@ class AuthService {
       return { tokens: { accessToken: tempToken, refreshToken: '', expiresIn: 300 }, user: this.formatUserProfile(user, user.clinicRoles, user.orgId), requires2FA: true, tempToken };
     }
 
-    // 2FA ENFORCEMENT: isOrgOwner must have 2FA enabled — force setup
-    if (user.isOrgOwner) {
+    // 2FA ENFORCEMENT: org owners WITH an enrolled secret must pass 2FA.
+    // Fresh owners (no secret yet) log in normally and enroll later in Settings.
+    if (user.isOrgOwner && user.twoFactorSecret) {
       const tempToken = generateAccessToken({
         sub: user.id, orgId: user.orgId, activeClinicId,
         roles: user.clinicRoles.map(r => r.role), isOrgOwner: user.isOrgOwner, is2FAEnabled: false,
@@ -161,7 +162,7 @@ class AuthService {
 
     await this.prisma.$transaction(async (tx) => {
       const clinic = await tx.clinic.create({ data: { orgId, name: clinicName || `${name}'s Clinic` } });
-      await tx.invite.create({ data: { orgId, clinicId: clinic.id, email, phone, tokenHash, role: 'SUB_MASTER', invitedById, status: 'pending', expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
+      await tx.invite.create({ data: { orgId, clinicId: clinic.id, email, phone, tokenHash, token, role: 'SUB_MASTER', invitedById, status: 'pending', expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
     });
 
     console.log(`[TODO] Send invite to ${email || phone}: /accept-invite?token=${token}`);
@@ -173,7 +174,7 @@ class AuthService {
     const token = generateInviteToken();
     const tokenHash = hashToken(token);
 
-    await this.prisma.invite.create({ data: { orgId, clinicId, email, phone, tokenHash, role, invitedById, status: 'pending', expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
+    await this.prisma.invite.create({ data: { orgId, clinicId, email, phone, tokenHash, token, role, invitedById, status: 'pending', expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) } });
 
     console.log(`[TODO] Send invite to ${email || phone}: /accept-invite?token=${token}`);
     return { inviteId: tokenHash, message: `Invitation sent to ${email || phone}` };
