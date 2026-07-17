@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { staffApi, type StaffMember, type StaffInvite } from '../lib/staff';
+import { staffApi, isOffboarded, type StaffMember, type StaffInvite } from '../lib/staff';
 import { roleLabels, DEFAULT_DEPARTMENTS } from '../lib/constants';
 import type { UserRole } from '../types';
 import {
@@ -54,7 +54,7 @@ export default function OnboardingPage() {
     setError('');
     try {
       const [s, i] = await Promise.all([
-        staffApi.list({ clinicId }),
+        staffApi.list({ clinicId, includeInactive: true }),
         staffApi.listInvites({ clinicId }),
       ]);
       setStaff(s);
@@ -72,8 +72,8 @@ export default function OnboardingPage() {
   }, [clinicId]);
 
   const pendingInvites = useMemo(() => invites.filter((i) => i.status === 'pending'), [invites]);
-  const activeStaff = useMemo(() => staff.filter((m) => m.status !== 'DISABLED'), [staff]);
-  const offboarded = useMemo(() => staff.filter((m) => m.status === 'DISABLED'), [staff]);
+  const activeStaff = useMemo(() => staff.filter((m) => !isOffboarded(m, clinicId)), [staff, clinicId]);
+  const offboarded = useMemo(() => staff.filter((m) => isOffboarded(m, clinicId)), [staff, clinicId]);
 
   const submitInvite = async () => {
     setInviteError('');
@@ -274,7 +274,7 @@ export default function OnboardingPage() {
                             </div>
                           </td>
                           <td className="px-4 py-2.5"><Badge variant={ROLE_COLORS[r?.role ?? ''] ?? 'neutral'}>{roleLabels[r?.role ?? ''] ?? r?.role ?? '—'}</Badge></td>
-                          <td className="px-4 py-2.5"><Badge variant="danger">{m.status}</Badge></td>
+                          <td className="px-4 py-2.5"><Badge variant="neutral">Offboarded</Badge></td>
                         </tr>
                       );
                     })

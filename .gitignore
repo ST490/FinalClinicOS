@@ -10,3 +10,5 @@ scripts/_conn-tests/
 *.log
 nul
 procs.txt
+
+.vercel

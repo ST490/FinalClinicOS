@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { staffApi, sortOffboardedLast, type StaffMember } from '../lib/staff';
+import { staffApi, sortOffboardedLast, isOffboarded, type StaffMember } from '../lib/staff';
 import { DEFAULT_DEPARTMENTS } from '../lib/constants';
 import {
   Users, Search, Loader2, Mail, Phone, AlertTriangle, Crown, Star,
@@ -75,6 +75,7 @@ export default function StaffDirectoryPage() {
     try {
       const list = await staffApi.list({
         ...(clinic?.id ? { clinicId: clinic.id } : {}),
+        includeInactive: true,
       });
       setStaff(sortOffboardedLast(list, clinic?.id));
     } catch (err: any) {
@@ -118,7 +119,11 @@ export default function StaffDirectoryPage() {
       const role = primaryRoleFor(m);
       if (roleFilter !== 'ALL' && role?.role !== roleFilter) return false;
       if (departmentFilter !== 'ALL' && (role?.department ?? '') !== departmentFilter) return false;
-      if (statusFilter !== 'ALL' && m.status !== statusFilter) return false;
+      if (statusFilter !== 'ALL') {
+        const off = isOffboarded(m, clinic?.id);
+        if (statusFilter === 'ACTIVE' && off) return false;
+        if (statusFilter === 'DISABLED' && !off) return false;
+      }
       if (q && !`${m.name} ${m.email ?? ''} ${m.phone ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
