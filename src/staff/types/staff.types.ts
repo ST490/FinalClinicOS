@@ -28,6 +28,7 @@ export interface UpdateStaffRoleInput {
   shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL';
   employmentType?: 'PERMANENT' | 'CONTRACT';
   joiningDate?: string;
+  department?: string;
 }
 
 // Non-clinical support workers added directly as ACTIVE staff, no invite/login.
@@ -41,7 +42,9 @@ export interface DirectAddStaffInput {
   phone?: string;
   role: DirectAddRole;
   department?: string;
+  wageType?: 'MONTHLY' | 'DAILY' | 'HOURLY';
   salary?: number | string;
+  employmentType?: 'PERMANENT' | 'CONTRACT';
 }
 
 export interface StaffScheduleInput {
@@ -51,6 +54,7 @@ export interface StaffScheduleInput {
   startTime: string;
   endTime: string;
   slotDuration?: number;
+  shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL';
   isActive?: boolean;
 }
 
@@ -62,6 +66,7 @@ export interface StaffResponse {
   status: string;
   isOrgOwner: boolean;
   createdAt: Date;
+  dateOfBirth?: Date | null;
   clinicRoles?: ClinicRoleResponse[];
 }
 
@@ -98,5 +103,6 @@ export interface ShiftScheduleResponse {
   endTime: string;
   slotDuration: number;
   isActive: boolean;
+  shiftType?: 'DAY' | 'NIGHT' | 'ROTATIONAL' | null;
   specificDate: Date | null;
 }

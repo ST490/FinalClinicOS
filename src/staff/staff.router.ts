@@ -27,6 +27,7 @@ const roleSchema = z.object({
   clinicId: z.string().uuid(),
   role: z.nativeEnum(UserRoleType),
   isPrimary: z.boolean().optional(),
+  department: z.string().optional(),
   designation: z.string().optional(),
   wageType: z.enum(['MONTHLY', 'DAILY', 'HOURLY']).optional(),
   baseRate: z.union([z.number(), z.string()]).optional(),
@@ -42,6 +43,7 @@ const scheduleSchema = z.object({
   startTime: z.string().regex(/^\d{2}:\d{2}$/),
   endTime: z.string().regex(/^\d{2}:\d{2}$/),
   slotDuration: z.number().int().optional(),
+  shiftType: z.enum(['DAY', 'NIGHT', 'ROTATIONAL']).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -72,6 +74,10 @@ const directAddSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   role: z.literal('SUPPORT'),
+  department: z.string().optional(),
+  wageType: z.enum(['MONTHLY', 'DAILY', 'HOURLY']).optional(),
+  salary: z.union([z.number(), z.string()]).optional(),
+  employmentType: z.enum(['PERMANENT', 'CONTRACT']).optional(),
 });
 
 router.post('/staff/direct-add', authenticate, loadUserRoles, checkPerm('staff:invite'), requireClinicAccess, async (req, res, next) => {
@@ -92,7 +98,7 @@ router.post('/staff/accept', async (req, res, next) => {
 // List staff
 router.get('/staff', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
   try {
-    const staff = await staffService.searchStaff(req.query.clinicId as string);
+    const staff = await staffService.searchStaff(req.query.clinicId as string, req.query.includeInactive === 'true');
     res.json(staff);
   } catch (e) { next(e); }
 });
@@ -137,7 +143,7 @@ router.get('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:read'
 // Update role
 router.patch('/staff/:userId/role', authenticate, loadUserRoles, checkPerm('staff:manage'), requireClinicAccess, async (req, res, next) => {
   try {
-    const role = await staffService.updateRole(req.params.userId as string, roleSchema.parse(req.body));
+    const role = await staffService.updateRole(req.params.userId as string, roleSchema.parse(req.body), req.user!.orgId, req.user!.id);
     res.json(role);
   } catch (e) { next(e); }
 });
@@ -153,7 +159,7 @@ router.delete('/staff/invites/:inviteId', authenticate, loadUserRoles, checkPerm
 // Deactivate
 router.delete('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:delete'), requireClinicAccess, async (req, res, next) => {
   try {
-    await staffService.deactivateStaff(req.params.userId as string, req.query.clinicId as string);
+    await staffService.deactivateStaff(req.params.userId as string, req.query.clinicId as string, req.user!.orgId, req.user!.id);
     res.json({ success: true });
   } catch (e) { next(e); }
 });
