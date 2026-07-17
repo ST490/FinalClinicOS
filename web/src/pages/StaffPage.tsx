@@ -288,7 +288,8 @@ export default function StaffPage() {
               {item.clinicRoles.map((r) => (
                 <div key={r.id} className="flex items-center gap-1.5">
                   <Badge variant={ROLE_COLORS[r.role] || 'neutral'}>
-                    {ROLE_LABELS[r.role] || r.role}
+                    {/* Support staff show their department, not "Support Staff". */}
+                    {r.role === 'SUPPORT' ? (r.department || '—') : (ROLE_LABELS[r.role] || r.role)}
                   </Badge>
                   <span className="text-xs text-text-muted truncate max-w-[140px]">{r.clinicName}</span>
                 </div>

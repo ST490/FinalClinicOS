@@ -125,7 +125,10 @@ export class StaffService {
       : 'ACTIVE';
     const where = clinicId
       ? { clinicRoles: { some: { clinicId, status: roleStatus } } }
-      : { orgId, clinicRoles: { some: { status: roleStatus } } };
+      // All-Branches (org owner): show the WHOLE org roster, not just members
+      // with an active clinic role. Scope by orgId only so org owners (who have
+      // no clinicRole) and any role-less members are included.
+      : { orgId };
 
     const users = await prisma.user.findMany({
       where: { ...where, status: { not: 'PENDING' as const } },
