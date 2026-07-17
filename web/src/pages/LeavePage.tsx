@@ -5,6 +5,7 @@ import { leaveApi, type LeaveRequest, type LeaveBalance, type LeaveStatus } from
 import { LEAVE_TYPES } from '../lib/constants';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import ModalPortal from '../components/ModalPortal';
 import {
   CalendarOff, Search, Loader2, Plus, AlertTriangle, Check, X,
 } from 'lucide-react';
@@ -275,7 +276,8 @@ function ApplyLeaveModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+    <ModalPortal>
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="w-full max-w-md bg-surface-card border border-border rounded-2xl shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-text-primary mb-4">Apply Leave</h2>
         <form onSubmit={submit} className="space-y-3">
@@ -320,5 +322,6 @@ function ApplyLeaveModal({
         </form>
       </div>
     </div>
+    </ModalPortal>
   );
 }

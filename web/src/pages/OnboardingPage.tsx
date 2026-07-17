@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, isOffboarded, type StaffMember, type StaffInvite } from '../lib/staff';
+import ModalPortal from '../components/ModalPortal';
 import { roleLabels, DEFAULT_DEPARTMENTS } from '../lib/constants';
 import type { UserRole } from '../types';
 import {
@@ -349,7 +350,8 @@ export default function OnboardingPage() {
 
       {/* Invite modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4" onClick={() => setShowModal(false)}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/40 p-4" onClick={() => setShowModal(false)}>
           <div className="bg-surface-card w-full max-w-md rounded-2xl border border-border p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-text-primary">{role === 'SUPPORT' ? 'Add Support Staff' : 'Send Staff Invite'}</h3>
@@ -452,6 +454,7 @@ export default function OnboardingPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

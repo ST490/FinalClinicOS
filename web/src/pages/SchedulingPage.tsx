@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember, type StaffSchedule } from '../lib/staff';
+import ModalPortal from '../components/ModalPortal';
 import { CalendarDays, Loader2, AlertTriangle, Pencil, Plus, RefreshCw } from 'lucide-react';
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -213,7 +214,8 @@ export default function SchedulingPage() {
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-12 px-4 pb-12 overflow-y-auto" onClick={() => setEditing(null)}>
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-12 px-4 pb-12 overflow-y-auto" onClick={() => setEditing(null)}>
           <div className="w-full max-w-sm bg-surface-card border border-border rounded-2xl shadow-xl p-5 shrink-0" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-text-primary mb-1">
               {DAYS[editing.dayOfWeek]} shift
@@ -252,6 +254,7 @@ export default function SchedulingPage() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

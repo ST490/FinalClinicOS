@@ -6,6 +6,7 @@ import { staffApi } from '../lib/staff';
 import { statsByRole } from '../lib/constants';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
+import ModalPortal from '../components/ModalPortal';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import type { Clinic } from '../types';
 import { Plus, ArrowRight, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -260,8 +261,9 @@ function MasterDashboard() {
 
       {/* Add Clinic Modal */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
+            <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-primary-500" />
               Add New Clinic
@@ -304,12 +306,14 @@ function MasterDashboard() {
             </form>
           </div>
         </div>
+        </ModalPortal>
       )}
 
       {/* Delete Branch confirmation modal — requires typing "delete" */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
+            <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-danger" />
               <h3 className="text-lg font-bold text-text-primary">Delete Branch</h3>
@@ -354,6 +358,7 @@ function MasterDashboard() {
             </div>
           </div>
         </div>
+        </ModalPortal>
       )}
     </div>
   );

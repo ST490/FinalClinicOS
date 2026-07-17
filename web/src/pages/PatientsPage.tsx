@@ -10,6 +10,7 @@ import { patientApi } from '../lib/patients';
 import { useApiQuery, apiMutate } from '../lib/useApiQuery';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import ErrorBanner from '../components/ui/ErrorBanner';
+import ModalPortal from '../components/ModalPortal';
 
 // ─── Types ───────────────────────────────────────────────
 type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
@@ -347,7 +348,8 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 px-4 pb-12 bg-black/50 backdrop-blur-sm overflow-y-auto">
+    <ModalPortal>
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 px-4 pb-12 bg-black/50 backdrop-blur-sm overflow-y-auto">
       <div className="bg-surface-card rounded-2xl border border-border shadow-2xl w-full max-w-lg shrink-0">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div>
@@ -441,6 +443,7 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }
 
