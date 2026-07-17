@@ -102,6 +102,11 @@ export async function requireClinicAccess(req: Request, res: Response, next: Nex
   }
 
   if (!clinicId) {
+    // ORG OWNER in "All Branches" mode: no clinic scope → org-wide access.
+    if (req.user.isOrgOwner) {
+      next();
+      return;
+    }
     res.status(400).json({ error: { code: 'CLINIC_ID_REQUIRED', message: 'clinicId is required' } });
     return;
   }

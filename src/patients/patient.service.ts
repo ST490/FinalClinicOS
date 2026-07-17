@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { auditService } from '../audit/audit.service.js';
 import {
   CreatePatientInput,
   UpdatePatientInput,
@@ -44,10 +45,24 @@ export class PatientService {
       },
     });
 
+    // ponytail: best-effort audit — never fail the create if logging errors.
+    await auditService.log({
+      orgId: clinic.orgId,
+      clinicId: input.clinicId,
+      userId: input.createdById,
+      action: 'CREATE',
+      entityType: 'PATIENT',
+      entityId: patient.id,
+      after: this.formatPatient(patient),
+    }).catch(() => {});
+
     return this.formatPatient(patient);
   }
 
-  async update(id: string, input: UpdatePatientInput): Promise<PatientResponse> {
+  async update(id: string, input: UpdatePatientInput, actorId?: string): Promise<PatientResponse> {
+    const scope = await prisma.patient.findUnique({ where: { id }, select: { orgId: true, clinicId: true } });
+    if (!scope) throw new Error('Patient not found');
+
     const patient = await prisma.patient.update({
       where: { id },
       data: {
@@ -75,6 +90,16 @@ export class PatientService {
       },
     });
 
+    await auditService.log({
+      orgId: scope.orgId,
+      clinicId: scope.clinicId,
+      userId: actorId,
+      action: 'UPDATE',
+      entityType: 'PATIENT',
+      entityId: id,
+      after: this.formatPatient(patient),
+    }).catch(() => {});
+
     return this.formatPatient(patient);
   }
 
@@ -100,6 +125,7 @@ export class PatientService {
     // Build where clause
     const where: Prisma.PatientWhereInput = {
       deletedAt: null, // Exclude soft-deleted
+      ...(input.orgId && { orgId: input.orgId }),
       ...(input.clinicId && { clinicId: input.clinicId }),
       ...(input.gender && { gender: input.gender }),
       ...(input.bloodGroup && { bloodGroup: input.bloodGroup }),

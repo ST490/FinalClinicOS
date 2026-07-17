@@ -7,6 +7,7 @@ export interface CreateDueInput {
   amountPaid?: number;
   appointmentId?: string;
   prescriptionId?: string;
+  dueDate?: Date | string;
   recordedById: string;
   createdAt?: Date | string;
 }
@@ -36,6 +37,7 @@ export interface DueResponse {
   status: string;
   appointmentId: string | null;
   prescriptionId: string | null;
+  dueDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
   patient?: { id: string; name: string; phone: string | null };

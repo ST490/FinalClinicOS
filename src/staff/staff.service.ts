@@ -119,13 +119,13 @@ export class StaffService {
     };
   }
 
-  async searchStaff(clinicId?: string, includeInactive = false): Promise<StaffResponse[]> {
+  async searchStaff(clinicId?: string, includeInactive = false, orgId?: string): Promise<StaffResponse[]> {
     const roleStatus: UserStatus | { in: UserStatus[] } = includeInactive
       ? { in: ['ACTIVE', 'DISABLED'] }
       : 'ACTIVE';
     const where = clinicId
       ? { clinicRoles: { some: { clinicId, status: roleStatus } } }
-      : { clinicRoles: { some: { status: roleStatus } } };
+      : { orgId, clinicRoles: { some: { status: roleStatus } } };
 
     const users = await prisma.user.findMany({
       where: { ...where, status: { not: 'PENDING' as const } },

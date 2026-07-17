@@ -52,7 +52,7 @@ const stockingLevelEnum = z.enum(['CENTRAL', 'DEPARTMENT', 'CONSIGNMENT']);
 const clinicalCategoryEnum = z.enum(['PHARMA', 'SURGICAL', 'DIAGNOSTIC', 'PPE', 'DIETARY', 'LINEN', 'MRO', 'OTHER']);
 
 // Schemas
-const createSchema = z.object({
+const baseCreateSchema = z.object({
   clinicId: z.string().uuid(),
   medicineId: z.string().uuid().optional(),
   customName: z.string().optional(),
@@ -77,7 +77,11 @@ const createSchema = z.object({
   consignmentOwner: z.string().optional(),
 });
 
-const updateSchema = createSchema.partial().omit({ clinicId: true, quantity: true });
+const createSchema = baseCreateSchema.refine((d) => !!d.medicineId || !!d.customName, {
+  message: 'Inventory item requires medicineId or customName',
+});
+
+const updateSchema = baseCreateSchema.partial().omit({ clinicId: true, quantity: true });
 
 const adjustSchema = z.object({
   type: z.enum(['RESTOCK', 'WRITE_OFF', 'ADJUSTMENT', 'RETURN', 'SALE']),

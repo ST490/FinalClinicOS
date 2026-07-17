@@ -8,6 +8,8 @@ export interface CreateVisitInput {
   chiefComplaint?: string;
   diagnosis?: string;
   notes?: string;
+  appointmentId?: string;
+  status?: string;
   createdById: string;
 }
 
@@ -17,6 +19,7 @@ export interface UpdateVisitInput {
   chiefComplaint?: string;
   diagnosis?: string;
   notes?: string;
+  status?: string;
 }
 
 export interface VisitResponse {
@@ -24,6 +27,7 @@ export interface VisitResponse {
   clinicId: string;
   orgId: string;
   patientId: string;
+  status?: string | null;
   doctorId: string;
   visitDate: Date;
   type: string | null;

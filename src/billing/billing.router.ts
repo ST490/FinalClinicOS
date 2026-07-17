@@ -39,6 +39,7 @@ const createDueSchema = z.object({
   amountPaid: z.number().min(0).optional(),
   appointmentId: z.string().uuid().optional(),
   prescriptionId: z.string().uuid().optional(),
+  dueDate: z.string().optional(),
   createdAt: z.string().optional(),
 });
 

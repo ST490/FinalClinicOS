@@ -9,13 +9,31 @@ import {
   AppointmentResponse,
   PaginatedAppointmentsResponse,
 } from './types/appointment.types.js';
-import { AppError } from '../common/errors.js';
+import { AppError, ForbiddenError } from '../common/errors.js';
+import { reminderService } from '../reminders/reminder.service.js';
+import { auditService } from '../audit/audit.service.js';
 
 export class AppointmentService {
   async create(input: CreateAppointmentInput): Promise<AppointmentResponse> {
     // Lookup clinic for orgId
     const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
+
+    // ponytail: tenant scoping — referenced patient must belong to this org,
+    // referenced doctor must be active at this clinic.
+    let patientConsent: { phone: string | null; whatsappConsent: boolean; smsConsent: boolean } | null = null;
+    if (input.patientId) {
+      const patient = await prisma.patient.findUnique({
+        where: { id: input.patientId },
+        select: { orgId: true, phone: true, whatsappConsent: true, smsConsent: true },
+      });
+      if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
+      patientConsent = { phone: patient.phone, whatsappConsent: patient.whatsappConsent, smsConsent: patient.smsConsent };
+    }
+    if (input.doctorId) {
+      const role = await prisma.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
+      if (!role) throw new ForbiddenError('Doctor is not active at this clinic');
+    }
 
     const slotStart = new Date(input.slotStart);
     const slotEnd = new Date(input.slotEnd);
@@ -67,6 +85,39 @@ export class AppointmentService {
         doctor: { select: { id: true, name: true } },
       },
     });
+
+    // ponytail: auto-bridge — schedule an appointment reminder on booking. Best-effort:
+    // never fail the booking if reminder creation fails. Channel is chosen by consent
+    // (WhatsApp preferred, SMS fallback); consent is re-verified at dispatch too.
+    if (input.patientId && patientConsent?.phone) {
+      const channel = patientConsent.whatsappConsent ? 'WHATSAPP' : patientConsent.smsConsent ? 'SMS' : null;
+      if (channel) {
+        const remindAt = new Date(slotStart.getTime() - 24 * 60 * 60 * 1000);
+        const scheduledAt = remindAt.getTime() > Date.now() ? remindAt : new Date();
+        try {
+          await reminderService.create({
+            clinicId: input.clinicId,
+            patientId: input.patientId,
+            appointmentId: appointment.id,
+            channel,
+            templateId: 'APPOINTMENT_REMINDER',
+            scheduledAt: scheduledAt.toISOString(),
+          });
+        } catch (e) {
+          console.error('[AppointmentService] auto-reminder scheduling failed:', e);
+        }
+      }
+    }
+
+    await auditService.log({
+      orgId: clinic.orgId,
+      clinicId: input.clinicId,
+      userId: input.createdById,
+      action: 'CREATE',
+      entityType: 'APPOINTMENT',
+      entityId: appointment.id,
+      after: this.formatAppointment(appointment),
+    }).catch(() => {});
 
     return this.formatAppointment(appointment);
   }
@@ -136,6 +187,16 @@ export class AppointmentService {
         doctor: { select: { id: true, name: true } },
       },
     });
+
+    await auditService.log({
+      orgId: appointment.orgId,
+      clinicId: appointment.clinicId,
+      userId: cancelledById,
+      action: 'CANCEL',
+      entityType: 'APPOINTMENT',
+      entityId: id,
+      after: this.formatAppointment(appointment),
+    }).catch(() => {});
 
     return this.formatAppointment(appointment);
   }
@@ -220,6 +281,7 @@ export class AppointmentService {
     const existingAppointments = await prisma.appointment.findMany({
       where: {
         doctorId: input.doctorId,
+        clinicId: input.clinicId,
         status: { not: 'CANCELLED' },
         slotStart: { gte: new Date(`${dateStr}T00:00:00`), lt: new Date(`${dateStr}T23:59:59`) },
       },

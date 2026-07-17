@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { ForbiddenError } from '../common/errors.js';
+import { auditService } from '../audit/audit.service.js';
 import {
   CreateDueInput,
   RecordPaymentInput,
@@ -13,6 +15,12 @@ export class BillingService {
   async createDue(input: CreateDueInput): Promise<DueResponse> {
     const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
+
+    // ponytail: tenant scoping — the billed patient must belong to this org.
+    if (input.patientId) {
+      const patient = await prisma.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
+      if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
+    }
 
     const amountPaid = input.amountPaid || 0;
     const amountDue = input.totalAmount - amountPaid;
@@ -30,6 +38,7 @@ export class BillingService {
         status: amountDue <= 0 ? 'PAID' : amountPaid > 0 ? 'PARTIAL' : 'DUE',
         appointmentId: input.appointmentId,
         prescriptionId: input.prescriptionId,
+        dueDate: input.dueDate ? new Date(input.dueDate) : null,
         recordedById: input.recordedById,
         createdAt: input.createdAt ? new Date(input.createdAt) : undefined,
       },
@@ -38,6 +47,16 @@ export class BillingService {
         recordedBy: { select: { id: true, name: true } },
       },
     });
+
+    await auditService.log({
+      orgId: clinic.orgId,
+      clinicId: input.clinicId,
+      userId: input.recordedById,
+      action: 'CREATE',
+      entityType: 'DUE',
+      entityId: due.id,
+      after: this.formatDue(due),
+    }).catch(() => {});
 
     return this.formatDue(due);
   }
@@ -63,6 +82,16 @@ export class BillingService {
       },
     });
 
+    await auditService.log({
+      orgId: existing.orgId,
+      clinicId: existing.clinicId,
+      userId: input.recordedById,
+      action: 'PAYMENT',
+      entityType: 'DUE',
+      entityId: id,
+      after: this.formatDue(due),
+    }).catch(() => {});
+
     return this.formatDue(due);
   }
 
@@ -81,6 +110,16 @@ export class BillingService {
         recordedBy: { select: { id: true, name: true } },
       },
     });
+
+    await auditService.log({
+      orgId: due.orgId,
+      clinicId: due.clinicId,
+      userId: input.waivedById,
+      action: 'WAIVE',
+      entityType: 'DUE',
+      entityId: id,
+      after: this.formatDue(due),
+    }).catch(() => {});
 
     return this.formatDue(due);
   }
@@ -170,6 +209,7 @@ export class BillingService {
       status: due.status,
       appointmentId: due.appointmentId,
       prescriptionId: due.prescriptionId,
+      dueDate: due.dueDate,
       createdAt: due.createdAt,
       updatedAt: due.updatedAt,
       patient: due.patient,

@@ -97,4 +97,5 @@ export interface DispenseItemInput {
 export interface DispensePrescriptionInput {
   items: DispenseItemInput[];
   performedById: string;
+  secondSignatoryId?: string;
 }

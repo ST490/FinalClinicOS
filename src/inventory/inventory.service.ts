@@ -1,5 +1,6 @@
 import { StockMovementType, Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { auditService } from '../audit/audit.service.js';
 import {
   CreateInventoryItemInput,
   UpdateInventoryItemInput,
@@ -24,6 +25,12 @@ export class InventoryService {
     // Lot/batch-tracked items are expiry-sensitive — they MUST carry a batch + expiry.
     if (input.trackingType === 'LOT_BATCH' && (!input.batchNo || !input.expiryDate)) {
       throw new Error('Lot/batch-tracked items require batchNo and expiryDate');
+    }
+
+    // An item must be identifiable: linked to a medicine OR given a custom name.
+    // The schema comment requires this at the service layer (no DB CHECK exists).
+    if (!input.medicineId && !input.customName) {
+      throw new Error('Inventory item requires medicineId or customName');
     }
 
     return await prisma.$transaction(async (tx) => {
@@ -73,6 +80,16 @@ export class InventoryService {
         },
       });
 
+      await auditService.log({
+        orgId: clinic.orgId,
+        clinicId: input.clinicId,
+        userId: input.createdById,
+        action: 'CREATE',
+        entityType: 'INVENTORY_ITEM',
+        entityId: item.id,
+        after: this.formatItem(item),
+      }).catch(() => {});
+
       return this.formatItem(item);
     });
   }
@@ -108,9 +125,11 @@ export class InventoryService {
       deletedAt: null,
       ...(input.clinicId && { clinicId: input.clinicId }),
       ...(input.medicineId && { medicineId: input.medicineId }),
-      ...(input.lowStock && {
-        quantity: { lte: 10 },
-      }),
+      // ponytail: low-stock means at/below the item's own reorderThreshold,
+      // not a hardcoded 10. Prisma can't compare two columns in `where`, so use raw.
+      ...(input.lowStock && ({
+        AND: [Prisma.raw('quantity <= reorder_threshold')],
+      } as Prisma.InventoryItemWhereInput)),
       ...(input.expiringBefore && {
         expiryDate: { lte: new Date(input.expiringBefore) },
       }),
@@ -333,6 +352,16 @@ export class InventoryService {
         where: { id: inventoryItemId },
         data: { quantity: { increment: input.quantityDelta } },
       });
+
+      await auditService.log({
+        orgId: item.orgId,
+        clinicId: item.clinicId,
+        userId: input.performedById,
+        action: 'STOCK_ADJUST',
+        entityType: 'INVENTORY_MOVEMENT',
+        entityId: movement.id,
+        after: this.formatMovement(movement),
+      }).catch(() => {});
 
       return this.formatMovement(movement);
     });

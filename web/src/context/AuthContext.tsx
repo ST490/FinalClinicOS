@@ -156,6 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.isInviteLogin) {
       return result;
     }
+    // Login-time 2FA gate: backend returns empty tokens + requires2FA.
+    // Don't proceed with a broken (empty) refresh token — surface it so the
+    // caller can route to 2FA verification with result.tempToken.
+    if (result.requires2FA) {
+      return result;
+    }
     const { accessToken, refreshToken } = result.tokens;
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);

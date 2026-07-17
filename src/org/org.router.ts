@@ -1,7 +1,7 @@
 import express from 'express';
 import { z } from 'zod';
 import { orgService } from './org.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
 
 const router = express.Router();
@@ -28,7 +28,7 @@ const createClinicSchema = z.object({
   workingHours: z.any().optional(),
 });
 
-const updateClinicSchema = createClinicSchema.partial().omit({ timezone: true, currency: true, locale: true });
+const updateClinicSchema = createClinicSchema.partial();
 
 const brandingSchema = z.object({
   logoUrl: z.string().url().optional().nullable(),
@@ -86,7 +86,7 @@ router.delete('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'),
   } catch (e) { next(e); }
 });
 
-router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
+router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:create'), async (req, res, next) => {
   try {
     const orgId = req.user!.orgId;
     const clinic = await orgService.createClinic(orgId, { ...createClinicSchema.parse(req.body), createdById: req.user!.id });
@@ -110,7 +110,7 @@ router.get('/clinics', authenticate, loadUserRoles, checkPerm('clinic:read'), as
   } catch (e) { next(e); }
 });
 
-router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read'), async (req, res, next) => {
+router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read'), requireClinicAccess, async (req, res, next) => {
   try {
     const clinic = await orgService.getClinic(req.params.id as string);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
@@ -123,7 +123,7 @@ router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read')
   } catch (e) { next(e); }
 });
 
-router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
+router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, async (req, res, next) => {
   try {
     const clinic = await orgService.getClinic(req.params.id as string);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
@@ -137,7 +137,7 @@ router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:mana
   } catch (e) { next(e); }
 });
 
-router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
+router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, async (req, res, next) => {
   try {
     const clinic = await orgService.getClinic(req.params.id as string);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
@@ -151,7 +151,7 @@ router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('cl
   } catch (e) { next(e); }
 });
 
-router.delete('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), async (req, res, next) => {
+router.delete('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), requireClinicAccess, async (req, res, next) => {
   try {
     const clinic = await orgService.getClinic(req.params.id as string);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }

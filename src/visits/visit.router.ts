@@ -40,6 +40,8 @@ const createSchema = z.object({
   chiefComplaint: z.string().optional(),
   diagnosis: z.string().optional(),
   notes: z.string().optional(),
+  appointmentId: z.string().uuid().optional(),
+  status: z.string().optional(),
 });
 
 const updateSchema = createSchema.partial().omit({ clinicId: true, patientId: true, doctorId: true });
@@ -93,6 +95,15 @@ router.patch('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:upda
     if (!visit) return;
     const updated = await visitService.update(req.params.id as string, updateSchema.parse(req.body));
     res.json(updated);
+  } catch (e) { next(e); }
+});
+
+router.delete('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:delete'), async (req, res, next) => {
+  try {
+    const visit = await verifyVisitAccess(req, res);
+    if (!visit) return;
+    await visitService.delete(req.params.id as string, req.user!.id);
+    res.json({ success: true });
   } catch (e) { next(e); }
 });
 

@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { auditService } from './audit.service.js';
 import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { withTenant } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -35,7 +36,10 @@ router.get('/audit/entity/:entityType/:entityId', authenticate, loadUserRoles, a
     if (!req.user?.isOrgOwner) {
       res.status(403).json({ error: { code: 'FORBIDDEN' } }); return;
     }
-    const entries = await auditService.getByEntity(req.params.entityType as string, req.params.entityId as string);
+    const entries = await withTenant(req, () => auditService.getByEntity(req.params.entityType as string, req.params.entityId as string, {
+      orgId: req.user!.orgId,
+      clinicId: typeof req.query.clinicId === 'string' ? req.query.clinicId : undefined,
+    }));
     res.json(entries);
   } catch (e) { next(e); }
 });

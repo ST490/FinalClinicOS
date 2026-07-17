@@ -52,9 +52,8 @@ const createPatientSchema = z.object({
   tags: z.array(z.string()).optional().default([]),
   whatsappConsent: z.boolean().optional().default(false),
   smsConsent: z.boolean().optional().default(false),
-}).refine(data => data.email || data.phone, {
-  message: 'Either email or phone is required',
 });
+// ponytail: only name is required; email/phone/address/etc. are optional.
 
 const updatePatientSchema = z.object({
   name: z.string().min(2).optional(),
@@ -77,7 +76,9 @@ const updatePatientSchema = z.object({
 
 const searchSchema = z.object({
   query: z.string().optional(),
-  clinicId: z.string().uuid().optional(),
+  // ponytail: clinicId is a string PK — seed data uses non-uuid ids (e.g. "demo-clinic"),
+  // so do NOT enforce uuid here or every query scoped to those clinics 400s.
+  clinicId: z.string().optional(),
   tags: z.array(z.string()).optional(),
   bloodGroup: z.string().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']).optional(),
@@ -150,17 +151,42 @@ router.post(
 );
 
 // GET /patients — List/search patients
+// Scoped to the caller's tenant: org owners see every patient in their org,
+// clinic-scoped users see patients across all clinics they hold a role in.
+// (No single clinicId is required, so MASTER/owners with no "active clinic"
+// still get results, and multi-clinic staff see all their patients.)
 router.get(
   '/patients',
   authenticate,
   loadUserRoles,
   checkPermission('patient:read'),
-  requireClinicAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const clinicId = req.query.clinicId as string;
       const params = searchSchema.parse(req.query);
-      const result = await patientService.search({ ...params, clinicId });
+      const clinicIdFromQuery = req.query.clinicId as string | undefined;
+
+      const scope: { orgId?: string; clinicId?: string | { in: string[] } } = {};
+      if (req.user!.isOrgOwner) {
+        scope.orgId = req.user!.orgId;
+        // Org owners may optionally narrow to one of their clinics.
+        if (clinicIdFromQuery) scope.clinicId = clinicIdFromQuery;
+      } else {
+        // Clinic-scoped users see patients across ALL clinics they hold a role
+        // in (not just the one passed in), so the picker is never empty just
+        // because their "active" clinic differs from where patients live.
+        const roleClinicIds = req.user!.roles.map(r => r.clinicId).filter(Boolean);
+        if (roleClinicIds.length > 0) {
+          scope.clinicId = { in: roleClinicIds };
+        }
+      }
+
+      // Non-org-owner with no clinic roles → nothing to show (no cross-org leak).
+      if (!scope.orgId && !scope.clinicId) {
+        res.json({ data: [], pagination: { page: params.page, limit: params.limit, total: 0, totalPages: 0 } });
+        return;
+      }
+
+      const result = await patientService.search({ ...params, ...scope });
 
       res.json(result);
     } catch (error) {
@@ -197,7 +223,7 @@ router.patch(
       const patient = await verifyPatientAccess(req, res);
       if (!patient) return;
       const data = updatePatientSchema.parse(req.body);
-      const updated = await patientService.update(req.params.patientId as string, data);
+      const updated = await patientService.update(req.params.patientId as string, data, req.user!.id);
       res.json(updated);
     } catch (error) {
       next(error);

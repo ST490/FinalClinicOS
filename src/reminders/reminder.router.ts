@@ -1,7 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
 import { reminderService } from './reminder.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
+import twilio from 'twilio';
+import { config } from '../config/index.js';
 
 const router = express.Router();
 
@@ -32,6 +34,24 @@ const webhookSchema = z.object({
   error: z.string().optional(),
 });
 
+// Twilio signs every webhook request with an HMAC over the URL + POST params.
+// Reject anything that doesn't verify — the old endpoint trusted any caller.
+function verifyTwilioWebhook(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const signature = req.headers['x-twilio-signature'] as string | undefined;
+  const authToken = config.twilio.authToken;
+  if (!authToken || !signature) {
+    res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Webhook signature required' } });
+    return;
+  }
+  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
+  const url = `${proto}://${req.headers.host}${req.originalUrl}`;
+  if (!twilio.validateRequest(authToken, signature, url, req.body as Record<string, string>)) {
+    res.status(401).json({ error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' } });
+    return;
+  }
+  next();
+}
+
 // Create reminder (staff trigger)
 router.post('/reminders', authenticate, loadUserRoles, async (req, res, next) => {
   try {
@@ -41,7 +61,7 @@ router.post('/reminders', authenticate, loadUserRoles, async (req, res, next) =>
 });
 
 // Search reminders
-router.get('/reminders', authenticate, loadUserRoles, async (req, res, next) => {
+router.get('/reminders', authenticate, loadUserRoles, requireClinicAccess, async (req, res, next) => {
   try {
     const result = await reminderService.search(searchSchema.parse(req.query));
     res.json(result);
@@ -49,7 +69,7 @@ router.get('/reminders', authenticate, loadUserRoles, async (req, res, next) => 
 });
 
 // Get pending reminders (for queue processor)
-router.get('/reminders/pending/:clinicId', authenticate, async (req, res, next) => {
+router.get('/reminders/pending/:clinicId', authenticate, loadUserRoles, requireClinicAccess, async (req, res, next) => {
   try {
     const reminders = await reminderService.getPendingReminders(req.params.clinicId as string);
     res.json(reminders);
@@ -57,7 +77,7 @@ router.get('/reminders/pending/:clinicId', authenticate, async (req, res, next) 
 });
 
 // WhatsApp BSP webhook
-router.post('/webhooks/whatsapp-status', async (req, res, next) => {
+router.post('/webhooks/whatsapp-status', verifyTwilioWebhook, async (req, res, next) => {
   try {
     const { messageId, status, error } = webhookSchema.parse(req.body);
     await reminderService.updateStatus(messageId, status, error);

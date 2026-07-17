@@ -1,11 +1,23 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { ForbiddenError } from '../common/errors.js';
+import { auditService } from '../audit/audit.service.js';
 import { CreateVisitInput, UpdateVisitInput, VisitResponse, SearchVisitsInput, VisitStats } from './types/visit.types.js';
 
 export class VisitService {
   async create(input: CreateVisitInput): Promise<VisitResponse> {
     const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
+
+    // ponytail: tenant scoping — patient must belong to this org, doctor active at this clinic.
+    if (input.patientId) {
+      const patient = await prisma.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
+      if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
+    }
+    if (input.doctorId) {
+      const role = await prisma.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
+      if (!role) throw new ForbiddenError('Doctor is not active at this clinic');
+    }
 
     const visit = await prisma.patientVisit.create({
       data: {
@@ -19,6 +31,7 @@ export class VisitService {
         chiefComplaint: input.chiefComplaint,
         diagnosis: input.diagnosis,
         notes: input.notes,
+        status: (input.status as any) ?? 'COMPLETED',
         createdById: input.createdById,
       },
       include: {
@@ -27,6 +40,15 @@ export class VisitService {
         appointments: { select: { id: true, slotStart: true, slotEnd: true }, take: 1 },
       },
     });
+
+    // Link the visit back to its appointment so Appointment.visitId (which was
+    // never written before) is populated — closes the appointment↔visit gap.
+    if (input.appointmentId) {
+      const appt = await prisma.appointment.findUnique({ where: { id: input.appointmentId }, select: { clinicId: true } });
+      if (!appt) throw new Error('Appointment not found');
+      if (appt.clinicId !== input.clinicId) throw new ForbiddenError('Appointment does not belong to this clinic');
+      await prisma.appointment.update({ where: { id: input.appointmentId }, data: { visitId: visit.id } });
+    }
 
     return this.formatVisit(visit);
   }
@@ -52,6 +74,7 @@ export class VisitService {
         chiefComplaint: input.chiefComplaint,
         diagnosis: input.diagnosis,
         notes: input.notes,
+        ...(input.status ? { status: input.status as any } : {}),
       },
       include: {
         patient: { select: { id: true, name: true, phone: true } },
@@ -62,12 +85,29 @@ export class VisitService {
     return this.formatVisit(visit);
   }
 
+  // Soft-delete: mark archived + set deletedAt so it drops out of listings.
+  async delete(id: string, actorId?: string): Promise<void> {
+    const visit = await prisma.patientVisit.update({
+      where: { id },
+      data: { deletedAt: new Date(), status: 'CANCELLED' },
+    });
+    await auditService.log({
+      orgId: visit.orgId,
+      clinicId: visit.clinicId,
+      userId: actorId,
+      action: 'DELETE',
+      entityType: 'PATIENT_VISIT',
+      entityId: id,
+    }).catch(() => {});
+  }
+
   async search(input: SearchVisitsInput): Promise<{ data: VisitResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
 
     const where: Prisma.PatientVisitWhereInput = {
+      deletedAt: null,
       ...(input.clinicId && { clinicId: input.clinicId }),
       ...(input.patientId && { patientId: input.patientId }),
       ...(input.doctorId && { doctorId: input.doctorId }),
@@ -119,6 +159,7 @@ export class VisitService {
       orgId: visit.orgId,
       patientId: visit.patientId,
       doctorId: visit.doctorId,
+      status: visit.status,
       visitDate: visit.visitDate,
       type: visit.type,
       vitals: visit.vitals,

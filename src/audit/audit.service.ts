@@ -55,9 +55,9 @@ export class AuditService {
     };
   }
 
-  async getByEntity(entityType: string, entityId: string): Promise<AuditResponse[]> {
+  async getByEntity(entityType: string, entityId: string, scope: { orgId: string; clinicId?: string }): Promise<AuditResponse[]> {
     const entries = await prisma.auditLog.findMany({
-      where: { entityType, entityId },
+      where: { entityType, entityId, orgId: scope.orgId, ...(scope.clinicId ? { clinicId: scope.clinicId } : {}) },
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { name: true } } },
     });

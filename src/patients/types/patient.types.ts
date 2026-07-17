@@ -42,7 +42,8 @@ export interface UpdatePatientInput {
 
 export interface PatientSearchInput {
   query?: string; // name, email, phone search
-  clinicId?: string;
+  clinicId?: string | { in: string[] };
+  orgId?: string;
   tags?: string[];
   bloodGroup?: string;
   gender?: Gender;

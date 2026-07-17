@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { appointmentService } from './appointment.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenant } from '../config/tenant-session.js';
 import express from 'express';
 
 const router = express.Router();
@@ -135,7 +136,7 @@ router.get('/appointments/availability/:clinicId/:doctorId', authenticate, loadU
     const { clinicId, doctorId } = req.params as { clinicId: string; doctorId: string };
     const date = req.query.date as string;
     if (!date) { res.status(400).json({ error: { code: 'DATE_REQUIRED' } }); return; }
-    const slots = await appointmentService.getDoctorAvailability({ clinicId, doctorId, date });
+    const slots = await withTenant(req, () => appointmentService.getDoctorAvailability({ clinicId, doctorId, date }));
     res.json(slots);
   } catch (e) { next(e); }
 });

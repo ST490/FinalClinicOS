@@ -14,7 +14,7 @@ export class ReminderProcessor {
     const reminder = await prisma.reminder.findUnique({
       where: { id: reminderId },
       include: {
-        patient: { select: { name: true, phone: true } },
+        patient: { select: { name: true, phone: true, whatsappConsent: true, smsConsent: true } },
         clinic: { select: { name: true } },
         appointment: {
           select: {
@@ -35,6 +35,26 @@ export class ReminderProcessor {
         data: { status: 'FAILED', errorMessage: 'Patient has no phone number' },
       });
       return { id: reminder.id, status: 'skipped_no_phone' };
+    }
+
+    // ponytail: EMAIL has no provider yet — don't silently misroute it to SMS.
+    // Mark terminal-FAILED so it's visible instead of quietly SMS-ing the patient.
+    if (reminder.channel === 'EMAIL') {
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: { status: 'FAILED', errorMessage: 'Email channel not supported yet (no email provider configured)' },
+      });
+      return { id: reminder.id, status: 'skipped_email_unsupported' };
+    }
+
+    // ponytail: consent gate — never message a patient who hasn't opted in for this channel.
+    const consented = reminder.channel === 'WHATSAPP' ? reminder.patient.whatsappConsent : reminder.patient.smsConsent;
+    if (!consented) {
+      await prisma.reminder.update({
+        where: { id: reminder.id },
+        data: { status: 'FAILED', errorMessage: `Patient has not consented to ${reminder.channel} messages` },
+      });
+      return { id: reminder.id, status: 'skipped_no_consent' };
     }
 
     const message = remiderTemplates.render(reminder.templateId, {
@@ -58,13 +78,19 @@ export class ReminderProcessor {
           });
     } catch (err: any) {
       console.error(`[ReminderProcessor] Twilio dispatch failed for reminderId: ${reminder.id}:`, err);
+      // ponytail: honor maxRetries. While attempts remain, keep the reminder PENDING and
+      // re-throw so BullMQ re-enqueues it with exponential backoff. Once exhausted, mark
+      // terminal-FAILED and swallow so the job (and any sweep loop) stops retrying.
+      const exhausted = reminder.retryCount + 1 >= reminder.maxRetries;
       await prisma.reminder.update({
         where: { id: reminder.id },
         data: {
-          status: 'FAILED',
+          status: exhausted ? 'FAILED' : 'PENDING',
           errorMessage: err.message || String(err),
+          retryCount: { increment: 1 },
         },
       });
+      if (!exhausted) throw err;
       return { id: reminder.id, status: 'FAILED' };
     }
 
@@ -90,7 +116,13 @@ export class ReminderProcessor {
 
     const results = [];
     for (const { id } of pendingReminders) {
-      results.push(await this.processOneReminder(id));
+      // ponytail: processOneReminder re-throws while retries remain; keep the sweep
+      // resilient so one retryable reminder doesn't abort the whole batch.
+      try {
+        results.push(await this.processOneReminder(id));
+      } catch {
+        results.push({ id, status: 'FAILED' });
+      }
     }
     return results;
   }

@@ -64,6 +64,8 @@ const dispenseSchema = z.object({
     prescriptionItemId: z.string().uuid(),
     quantity: z.number().int().min(1),
   })),
+  // Required by inventory.deductStockTx for CONTROLLED (dual sign-off) drugs.
+  secondSignatoryId: z.string().uuid().optional(),
 });
 
 const statusSchema = z.object({
@@ -128,6 +130,13 @@ router.post('/prescriptions/:id/dispense', authenticate, loadUserRoles, checkPer
     if (!prescription) return;
     const result = await prescriptionService.dispensePrescription(req.params.id as string, { ...dispenseSchema.parse(req.body), performedById: req.user!.id });
     res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.delete('/prescriptions/items/:itemId', authenticate, loadUserRoles, checkPerm('prescription:update'), async (req, res, next) => {
+  try {
+    await prescriptionService.deleteItem(req.params.itemId as string, req.user!.id);
+    res.json({ success: true });
   } catch (e) { next(e); }
 });
 

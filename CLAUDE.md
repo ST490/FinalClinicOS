@@ -17,7 +17,9 @@ every step; only reminders + Rx→inventory flow need real run-time validation.
 
 ## Load-bearing gaps (must clear before declaring v0.9 done)
 
-- `prisma/migrations/` doesn't exist — schema defined, never migrated
+- Migrations exist (`init` + `appointment_category`) but 2 more are disabled in
+  `prisma_pending_backup/` (RLS + unique slot index) pending re-dating — see
+  `to_deploy.md`.
 - No background queue (BullMQ/worker) — reminder dispatch is synchronous
 - Test directory missing — zero coverage, no tenant-isolation tests yet
 
@@ -77,7 +79,7 @@ then `generate`; OR `Stop-Process` the node/query-engine PID holding the DLL.
    - Long prescriptions rely on browser pagination; verify multi-page breaks
      look clean (no row split mid-item) before shipping to clinics.
 
-## Open from §30 + Builder Non-Negotiables (block full-speed)con
+## Open from §30 + Builder Non-Negotiables (block full-speed)
 
 - Pricing model (clinic / seat / usage)
 - Supabase project + `DATABASE_URL` (port 6543) + `DIRECT_URL` (port 5432)
@@ -127,83 +129,6 @@ wire to `patientApi` when mock data is addressed.
 ## Reference
 
 - `Careme-Technical-Blueprint.md` — single source of truth for architecture, kept up to date as §30 unknowns resolve.
-
-## Deploy: build workarounds (learned 2026-07-16, Vercel + Render)
-
-These are fixes for deploy-time build failures, NOT code bugs. Revisit when
-upgrading toolchains.
-
-### Vercel (frontend, `web/`)
-- Root Directory MUST be `web` (app lives in `web/`, not repo root).
-- Build script in `web/package.json` is `vite build` ONLY (no `tsc -b`).
-  Reason: `tsc -b` failed the build on pre-existing frontend type errors
-  (unused imports + `InvRow`/`InventoryItem` mismatch in InventoryPage,
-  `Date` vs `string` in AppointmentsPage `fmtTime`). The app runs fine under
-  esbuild (dev runtime ignores types), so `tsc` was dropped from the build
-  gate to unblock deploy. TODO: re-add `tsc -b` after those type errors are
-  fixed for real — don't ship type-blind forever.
-- `zod` was missing from `web/package.json` but imported by
-  `web/src/lib/useApiQuery.ts` — added as a dep.
-- Any NEW frontend file must be COMMITTED or Vercel's clone won't have it
-  (first deploy failed on `EmptyState` + charts + HR pages that were
-  untracked). Local build works because the files exist on disk; Vercel only
-  sees git.
-
-### Render (backend, `src/`)
-- Build Command: `npm install prisma@5.22.0 @prisma/client@5.22.0
-  --legacy-peer-deps --no-save && npx prisma generate && npx tsc`
-  - `prisma` is pinned to EXACT `5.22.0` in package.json AND forced in the
-    build command because Render's `npm install` drifted to Prisma 7.8.0,
-    which rejects `url`/`directUrl` in `schema.prisma` (P1012). Our schema
-    + code are Prisma 5 style. Never let Render grab 7.x.
-  - `--legacy-peer-deps` needed because bullmq@5.79.2 peer-wants redis>=5
-    but redis@6.1.0 is in the tree (ERESOLVE). `.npmrc` with
-    `legacy-peer-deps=true` was also added but did NOT stop Render's drift;
-    the explicit `npm install prisma@5.22.0` in the build command is what
-    actually fixed it.
-  - Pre-Deploy Command (`prisma migrate deploy`) is a PAID Render feature —
-    not available on free tier. Run migrations manually after first deploy
-    (Render shell or local `npx prisma migrate deploy` against Supabase).
-- Start Command: `node dist/index.js`.
-- Health Check Path: `/health`.
-- Env gotchas when reusing local `.env` on Render:
-  - DELETE `PORT` (let Render assign; app reads `process.env.PORT || 3000`).
-  - DELETE `REDIS_URL` if it points at `redis://localhost:6379` (no Redis on
-    Render yet) — app fail-opens without it, but a bad localhost URL throws.
-  - SET `CORS_ORIGINS=https://<vercel-app>.vercel.app` (local `.env` had
-    `http://localhost:3000`, which blocks the real frontend).
-- Backend `tsc` caught one real narrowing bug in
-  `src/attendance/attendance.service.ts` (else-if chain on `r.status`) —
-  fixed by using independent `if`s. `npx tsc --noEmit` is clean (exit 0).
-- Node 26.5.0 is what Render picks (>=20 satisfied). No action needed.
-
-### Migrations (Supabase Postgres) — IMPORTANT
-- Two migrations were DISABLED (moved out of `prisma/migrations/` to repo-root
-  `prisma_pending_backup/`): `20260716000000_rls_tenant_isolation` and
-  `20260717000000_unique_doctor_slot_active`. Reasons:
-  - The RLS migration dates `20260716` but sorts before the `20260705` init
-    when Prisma applies unapplied migrations, so it ran `ALTER TABLE patients
-    ENABLE ROW LEVEL SECURITY` BEFORE `patients` existed → P3018. It also
-    CREATEs DB ROLES (`careme_app`/`careme_bypass`, `CHANGE_ME` pw) which
-    assume a non-superuser connection (Supabase `postgres` is superuser → RLS
-    bypassed anyway). Both are blueprint PENDING items (§14, §13), not
-    login blockers.
-  - A half-applied init left `patients` missing + orphan `patient_visits` rows
-    → `db push` then failed on FK violation. Resolved by
-    `prisma migrate reset --force --skip-seed --skip-generate` (clean slate,
-    re-applied the 2 good migrations: init + appointment_category). Safe
-    because the DB had no real data yet.
-- To run migrations: `npx prisma migrate deploy` (local, uses verified
-  `.env` URLs). Pre-Deploy on Render is paid-only, so do it manually.
-- `prisma db push` is the fallback when `migrate` is blocked (Windows EPERM /
-  history drift) — it syncs schema without migration history. Prefer
-  `migrate deploy` for reproducible history.
-- Re-enable the disabled migrations ONLY after re-dating them to sort AFTER
-  `20260715120000` AND deciding the role/password strategy. Don't just drop
-  them back in — they'll re-trigger P3018.
-
-### Live URLs (2026-07-16)
-- Frontend: https://careme-snowy.vercel.app
-- Backend:  https://careme-smzs.onrender.com
-- DB: Supabase `lvotusljnaiirpvmhtdz` (pooler :6543 / direct :5432) — both
-  verified connecting via standalone `select 1` test before wiring.
+- `to_deploy.md` — deploy plan (Vercel + Render), env vars, deploy order. The
+  full `render.yaml` / `vercel.json` wiring and the disabled-migration story
+  live there; don't duplicate deploy notes here.

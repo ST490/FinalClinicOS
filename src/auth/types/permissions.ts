@@ -52,6 +52,8 @@ export type Permission =
   | 'leave:read'
   | 'payroll:read'
   | 'payroll:manage'
+  | 'credential:read'
+  | 'credential:manage'
 
   // Org-level
   | 'org:manage'            // Master only — billing, plans, etc.
@@ -72,8 +74,8 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
   ],
 
   SUB_MASTER: [
-    // Full access within their clinic(s) — but CANNOT create/update/delete clinics (MASTER only)
-    'clinic:read',
+    // Full access within their clinic(s). Can create/update clinics, but CANNOT delete (MASTER only)
+    'clinic:create', 'clinic:update', 'clinic:read',
     'staff:invite', 'staff:manage', 'staff:read', 'staff:delete',
     'patient:create', 'patient:read', 'patient:update', 'patient:delete',
     'appointment:create', 'appointment:read', 'appointment:update', 'appointment:cancel',
@@ -106,7 +108,7 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
   PHARMACIST: [
     'patient:read',
     'appointment:read',
-    'prescription:read',
+    'prescription:read', 'prescription:update',
     'inventory:manage', 'inventory:read',
     'dues:manage', 'dues:read',
     'clinic:read',
@@ -127,6 +129,7 @@ const PERMISSIONS: Record<UserRoleType, Permission[]> = {
     'attendance:manage', 'attendance:read',
     'leave:manage', 'leave:read',
     'payroll:read', 'payroll:manage',
+    'credential:read', 'credential:manage',
     'clinic:read',
     'org:read',
   ],

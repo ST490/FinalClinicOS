@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { ForbiddenError } from '../common/errors.js';
+import { auditService } from '../audit/audit.service.js';
 import {
   CreatePrescriptionInput,
   PrescriptionResponse,
@@ -15,6 +17,23 @@ export class PrescriptionService {
   async create(input: CreatePrescriptionInput): Promise<PrescriptionResponse> {
     const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
+
+    // ponytail: tenant scoping — patient must belong to this org, doctor active at this clinic.
+    if (input.patientId) {
+      const patient = await prisma.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
+      if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
+    }
+    if (input.doctorId) {
+      const role = await prisma.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
+      if (!role) throw new ForbiddenError('Doctor is not active at this clinic');
+    }
+
+    // ponytail: every Rx line must identify the drug — catalogued or free-text.
+    for (const item of input.items) {
+      if (!item.medicineId && !item.customName) {
+        throw new Error('Each prescription item requires medicineId or customName');
+      }
+    }
 
     const prescription = await prisma.prescription.create({
       data: {
@@ -49,6 +68,16 @@ export class PrescriptionService {
       },
     });
 
+    await auditService.log({
+      orgId: clinic.orgId,
+      clinicId: input.clinicId,
+      userId: input.createdById,
+      action: 'CREATE',
+      entityType: 'PRESCRIPTION',
+      entityId: prescription.id,
+      after: this.formatPrescription(prescription),
+    }).catch(() => {});
+
     return this.formatPrescription(prescription);
   }
 
@@ -64,6 +93,31 @@ export class PrescriptionService {
       },
     });
     return prescription ? this.formatPrescription(prescription) : null;
+  }
+
+  // Delete a single Rx line. Dispensed lines are locked (stock already left inventory).
+  async deleteItem(prescriptionItemId: string, actorId?: string): Promise<void> {
+    const item = await prisma.prescriptionItem.findUnique({
+      where: { id: prescriptionItemId },
+      select: { dispensed: true, prescriptionId: true },
+    });
+    if (!item) throw new Error('Prescription item not found');
+    if (item.dispensed) throw new Error('Cannot delete a dispensed item');
+    const prescription = await prisma.prescription.findUnique({
+      where: { id: item.prescriptionId },
+      select: { orgId: true, clinicId: true },
+    });
+    await prisma.prescriptionItem.delete({ where: { id: prescriptionItemId } });
+    if (prescription) {
+      await auditService.log({
+        orgId: prescription.orgId,
+        clinicId: prescription.clinicId,
+        userId: actorId,
+        action: 'DELETE',
+        entityType: 'PRESCRIPTION_ITEM',
+        entityId: prescriptionItemId,
+      }).catch(() => {});
+    }
   }
 
   async search(input: SearchPrescriptionsInput): Promise<{ data: PrescriptionResponse[]; pagination: any }> {
@@ -177,7 +231,8 @@ export class PrescriptionService {
             item.quantity,
             input.performedById,
             'PRESCRIPTION',
-            id
+            id,
+            input.secondSignatoryId
           );
         }
 
@@ -206,6 +261,16 @@ export class PrescriptionService {
         },
       });
     });
+
+    await auditService.log({
+      orgId: prescription!.orgId,
+      clinicId: prescription!.clinicId,
+      userId: input.performedById,
+      action: 'DISPENSE',
+      entityType: 'PRESCRIPTION',
+      entityId: id,
+      after: this.formatPrescription(prescription!),
+    }).catch(() => {});
 
     return this.formatPrescription(prescription!);
   }

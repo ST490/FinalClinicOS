@@ -98,7 +98,7 @@ router.post('/staff/accept', async (req, res, next) => {
 // List staff
 router.get('/staff', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
   try {
-    const staff = await staffService.searchStaff(req.query.clinicId as string, req.query.includeInactive === 'true');
+    const staff = await staffService.searchStaff(req.query.clinicId as string, req.query.includeInactive === 'true', req.user!.orgId);
     res.json(staff);
   } catch (e) { next(e); }
 });
