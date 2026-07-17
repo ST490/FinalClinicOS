@@ -1,0 +1,102 @@
+# Render Blueprint (IaC) for Careme Clinic OS
+# Split mandated by to_deploy.md §1: Vercel serves the React SPA; Render runs
+# the long-lived Express API + 2 worker processes + Redis + Postgres.
+# Apply via Render dashboard → New → Blueprint → connect this repo.
+#
+# NOTE: Prisma is pinned to 5.22.0 in the build command because Render's
+# `npm install` drifts to Prisma 7.x, which rejects `url`/`directUrl` in
+# schema.prisma (P1012). Our schema + code are Prisma 5 style. See CLAUDE.md.
+
+services:
+  # ── Web API (long-lived) ───────────────────────────────────────────────
+  - type: web
+    name: careme-web
+    runtime: node
+    plan: starter
+    branch: main
+    rootDir: .
+    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false            # paste Supabase pooled (:6543)
+      - key: DIRECT_URL
+        sync: false            # paste Supabase direct (:5432)
+      - key: JWT_SECRET
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false            # exactly 32 hex chars
+      - key: SESSION_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: https://careme-snowy.vercel.app
+      - key: REDIS_URL
+        fromService:
+          name: careme-redis
+          type: redis
+          property: connectionString
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: REFRESH_TOKEN_EXPIRES_DAYS
+        value: "7"
+      - key: LOGIN_RATE_LIMIT
+        value: "5"
+      - key: LOGIN_RATE_WINDOW
+        value: "300"
+      - key: API_RATE_LIMIT
+        value: "100"
+      - key: API_RATE_WINDOW
+        value: "60"
+
+  # ── BullMQ worker (reminder dispatch) ──────────────────────────────────
+  - type: worker
+    name: careme-worker
+    runtime: node
+    plan: starter
+    branch: main
+    rootDir: .
+    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    startCommand: npm run worker   # tsx src/jobs/worker.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: careme-redis
+          type: redis
+          property: connectionString
+
+  # ── Reminder sweep (fallback dispatch) ─────────────────────────────────
+  - type: worker
+    name: careme-sweep
+    runtime: node
+    plan: starter
+    branch: main
+    rootDir: .
+    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    startCommand: npm run worker:sweep   # tsx src/notifications/reminder-processor.ts
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: careme-redis
+          type: redis
+          property: connectionString
+
+  # ── Redis (BullMQ + rate limiting) ─────────────────────────────────────
+  - type: redis
+    name: careme-redis
+    plan: starter
+    ipAllowList: []
