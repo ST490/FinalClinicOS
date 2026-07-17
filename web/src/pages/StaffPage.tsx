@@ -77,8 +77,8 @@ export default function StaffPage() {
     try {
       const staffList = await staffApi.list({
         ...(clinic?.id ? { clinicId: clinic.id } : {}),
-        // In "All Branches" (master org-wide) view, hide offboarded staff.
-        includeInactive: !!clinic?.id,
+        // All-Branches (org owner) view shows the full org roster incl. offboarded.
+        includeInactive: !clinic?.id,
       });
       const invitesList = clinic?.id
         ? await staffApi.listInvites({ clinicId: clinic.id })
@@ -281,13 +281,30 @@ export default function StaffPage() {
       key: 'role',
       header: 'Role & Clinic',
       render: (item) => {
-        const roleObj = item.clinicRoles?.find(r => !clinic?.id || r.clinicId === clinic?.id);
+        // All-Branches (org owner) view: show every clinic/role assignment.
+        if (!clinic?.id && item.clinicRoles?.length) {
+          return (
+            <div className="space-y-1">
+              {item.clinicRoles.map((r) => (
+                <div key={r.id} className="flex items-center gap-1.5">
+                  <Badge variant={ROLE_COLORS[r.role] || 'neutral'}>
+                    {ROLE_LABELS[r.role] || r.role}
+                  </Badge>
+                  <span className="text-xs text-text-muted truncate max-w-[140px]">{r.clinicName}</span>
+                </div>
+              ))}
+            </div>
+          );
+        }
+        const roleObj = item.clinicRoles?.find(r => r.clinicId === clinic?.id);
         const role = roleObj?.role || (item.isOrgOwner ? 'MASTER' : 'STAFF');
         const clinicName = roleObj?.clinicName || clinic?.name || 'All Clinics';
+        // Support staff are represented by their department, not a "Support Staff" role.
+        const roleLabel = role === 'SUPPORT' ? (roleObj?.department || '—') : (ROLE_LABELS[role] || role);
         return (
           <div className="space-y-1">
             <Badge variant={ROLE_COLORS[role] || 'neutral'}>
-              {ROLE_LABELS[role] || role}
+              {roleLabel}
             </Badge>
             <div className="text-xs text-text-muted">{clinicName}</div>
           </div>
@@ -298,8 +315,13 @@ export default function StaffPage() {
       key: 'status',
       header: 'Status',
       render: (item) => {
-        const role = item.clinicRoles?.find((r) => !clinic?.id || r.clinicId === clinic?.id);
-        const offboarded = role?.status === 'DISABLED' || item.status === 'DISABLED';
+        // Offboarded if every clinic role is DISABLED (or the user itself is disabled).
+        const roles = clinic?.id
+          ? item.clinicRoles?.filter(r => r.clinicId === clinic.id)
+          : item.clinicRoles;
+        const offboarded =
+          item.status === 'DISABLED' ||
+          (roles?.length ? roles.every(r => r.status === 'DISABLED') : false);
         return (
           <Badge variant={offboarded ? 'neutral' : 'success'}>
             {offboarded ? 'Offboarded' : 'Active'}
