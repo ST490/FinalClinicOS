@@ -4,12 +4,16 @@ import QRCode from 'qrcode';
 import { generateAccessToken, getAccessTokenExpiry, getRefreshTokenExpiry, generateRefreshTokenFamily, hashRefreshToken } from './utils/jwt.service.js';
 import { hashPassword, verifyPassword, generateInviteToken, generateRefreshToken, hashToken, encrypt2FASecret, decrypt2FASecret } from './utils/password.service.js';
 import { RegisterInput, LoginInput, InviteSubMasterInput, InviteStaffInput, AcceptInviteInput, AuthTokens, LoginResponse, RegisterResponse, UserProfile, InviteResponse, Setup2FAResponse } from './types/auth.types.js';
+import { prisma as sharedPrisma } from '../config/database.js';
 
 class AuthService {
   private prisma: PrismaClient;
 
   constructor() {
-    this.prisma = new PrismaClient();
+    // Reuse the singleton (Prisma 7 driver adapter + RLS-friendly DIRECT_URL).
+    // AuthService does not set RLS GUCs itself, so it must use the same client
+    // the rest of the app uses rather than spinning up its own Pool.
+    this.prisma = sharedPrisma;
   }
 
   async register(input: RegisterInput): Promise<RegisterResponse> {

@@ -58,6 +58,47 @@ not a code bug** and does not block functionality:
 Clear it by: reboot then `generate`; OR pause Defender real-time protection
 then `generate`; OR `Stop-Process` the node/query-engine PID holding the DLL.
 
+## Prisma ORM v7 (upgraded from 5.22.0 → 7.8.0)
+
+Prisma 7 is a **breaking architecture change**, not a version bump. The schema
+no longer holds connection URLs and the runtime client **requires a driver
+adapter** — `new PrismaClient()` with no adapter throws.
+
+What moved where:
+- `prisma/schema.prisma` → `datasource db { provider = "postgresql" }` only.
+  **No `url`, no `directUrl`** — those are gone from the schema for good.
+- `prisma.config.ts` (new) → CLI/migrations config. Defines `schema` path +
+  an async `adapter()` that builds a `pg.Pool` + `PrismaPg`. **Wired to
+  `DIRECT_URL`** (session-mode, port 5432), not `DATABASE_URL` (pgbouncer
+  transaction-mode, port 6543) — PgBouncer drops session state between
+  statements, which breaks `prisma migrate`/`db push` and would break RLS.
+- `@prisma/adapter-pg` is now a **runtime** dependency (was: only `pg` in
+  devDeps). `pg` is still used directly for the `Pool`.
+
+Runtime client instantiation (3 sites, all share the same pattern):
+- `src/config/database.ts` — the singleton. `new PrismaClient({ adapter: new
+  PrismaPg(new Pool({ connectionString: DIRECT_URL || DATABASE_URL })) })`.
+  Keeps the old `transactionOptions` + dev `log` settings. Preserves the
+  RLS design: the Pool uses DIRECT_URL so `SET LOCAL` in `withTenant()`
+  survives across statements inside an interactive transaction.
+- `src/auth/auth.service.ts` — `AuthService` no longer spins up its own
+  `PrismaClient`; it reuses the `database.ts` singleton. It never set RLS
+  GUCs itself, so sharing is correct and avoids a second Pool.
+- `scripts/seed.ts`, `scripts/backfill-support-department.ts` — each builds
+  its own adapter-backed client (they run outside the app, so they must not
+  touch the dev `global.prisma` singleton). Same DIRECT_URL reasoning.
+
+What did **not** change: the classic `prisma-client-js` generator is retained
+and every `import { ... } from '@prisma/client'` across `src/` still works —
+no import-path rewrites were needed. `npm run build` = `prisma generate && tsc`
+and passes clean on v7.8.0.
+
+Render build command (replace the old `npm install prisma@5.22.0 ...` line):
+`npm install --legacy-peer-deps && npx prisma generate && npx tsc`
+(No more pinning `prisma@5.22.0` — `package.json` now resolves 7.8.0. The
+`@prisma/adapter-pg` runtime dep ships in the lockfile so the pool/adapter
+are available at boot.)
+
 ## Pending (backend only; per blueprint sections)
 
 1. Migrations + seed script (§735)

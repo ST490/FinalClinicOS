@@ -8,10 +8,19 @@
  * ponytail: one file, ~100 lines, mirrors src/auth/auth.service.ts behaviour
  * so seed accounts log in identically to a user registered through the API.
  */
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import 'dotenv/config';
 
-const prisma = new PrismaClient();
+// Prisma 7 requires a driver adapter. Seed runs outside the app, so it gets its
+// own Pool wired to DIRECT_URL (session mode) — same reasoning as database.ts.
+const seedUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+if (!seedUrl) {
+  throw new Error('seed.ts: set DIRECT_URL (or DATABASE_URL) before running db:seed');
+}
+const prisma = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString: seedUrl })) });
 
 const ORG_NAME = 'Apex Medical Group';
 const CLINIC_NAME = 'Apex Hebbal';
