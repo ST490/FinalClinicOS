@@ -1,33 +1,47 @@
-import { ImgHTMLAttributes } from 'react';
+import { ImgHTMLAttributes, useEffect, useState } from 'react';
 
 export interface LogoProps extends ImgHTMLAttributes<HTMLImageElement> {
   variant: 'horizontal' | 'stacked' | 'icon-only' | 'wordmark-only';
-  lightBg?: boolean; // Default true. False represents dark background (white logo variant)
+  lightBg?: boolean; // If provided, overrides the automatic theme detection
 }
 
-export default function Logo({ variant, lightBg = true, className = '', style, ...props }: LogoProps) {
+export default function Logo({ variant, lightBg, className = '', style, ...props }: LogoProps) {
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+
+  useEffect(() => {
+    if (lightBg !== undefined) return;
+    
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [lightBg]);
+
+  const isLight = lightBg !== undefined ? lightBg : !isDark;
+
   let src = '';
   let minHeight = '24px';
   let aspectRatio = 'auto';
 
   switch (variant) {
     case 'horizontal':
-      src = lightBg ? '/lockup/lockup-horizontal-light.png' : '/lockup/lockup-horizontal-dark.png';
+      src = isLight ? '/lockup/lockup-horizontal-light.png' : '/lockup/lockup-horizontal-dark.png';
       aspectRatio = '161 / 30';
       minHeight = '24px';
       break;
     case 'stacked':
-      src = lightBg ? '/lockup/lockup-stacked-light.png' : '/lockup/lockup-stacked-dark.png';
+      src = isLight ? '/lockup/lockup-stacked-light.png' : '/lockup/lockup-stacked-dark.png';
       aspectRatio = '122 / 99';
       minHeight = '36px';
       break;
     case 'icon-only':
-      src = lightBg ? '/icon/app-icon-1024.png' : '/icon/app-icon-white-1024.png';
+      src = isLight ? '/icon/app-icon-1024.png' : '/icon/app-icon-white-1024.png';
       aspectRatio = '1 / 1';
       minHeight = '16px';
       break;
     case 'wordmark-only':
-      src = lightBg ? '/wordmark/wordmark-standard.png' : '/wordmark/wordmark-allwhite.png';
+      src = isLight ? '/wordmark/wordmark-standard.png' : '/wordmark/wordmark-allwhite.png';
       aspectRatio = '161 / 30';
       minHeight = '20px';
       break;
