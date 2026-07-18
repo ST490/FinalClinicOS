@@ -38,7 +38,21 @@ import { SHOW_DEMO_SWITCHER } from './mockData';
 function AuthenticatedApp() {
   const { isAuthenticated, isLoading } = useAuth();
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><span>Loading...</span></div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-surface-sidebar font-sans w-full">
+        <div className="flex flex-col items-center space-y-4">
+          <img src="/mark/mark-transparent.png" alt="CareMe" className="w-12 h-12 object-contain animate-pulse" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-text-secondary tracking-wider uppercase">Loading CareMe</span>
+            <div className="w-1.5 h-1.5 bg-primary-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+            <div className="w-1.5 h-1.5 bg-primary-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+            <div className="w-1.5 h-1.5 bg-primary-600 rounded-full animate-bounce"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Stethoscope, Loader2, ShieldAlert, KeyRound, CheckCircle2 } from 'lucide-react';
-import Logo from '../components/Logo';
+import { Loader2, ShieldAlert, KeyRound, CheckCircle2 } from 'lucide-react';
 
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
@@ -93,7 +92,9 @@ export default function AcceptInvitePage() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-12 md:p-16 overflow-y-auto">
         <div className="w-full max-w-md space-y-7">
           {/* Logo */}
-          <Logo variant="horizontal" className="h-7" />
+          <div className="flex items-center gap-2.5">
+            <img src="/lockup/lockup-horizontal-light.png" alt="CareMe Logo" className="h-9 object-contain" />
+          </div>
 
           <div className="space-y-1">
             <h2 className="text-2xl font-bold tracking-tight text-text-primary">Finish setting up your account</h2>
@@ -164,7 +165,9 @@ export default function AcceptInvitePage() {
         <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full bg-primary-500/20 blur-3xl animate-pulse" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full bg-teal-500/10 blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
         <div className="relative max-w-lg px-8 text-center space-y-6">
-          <Logo variant="icon-only" lightBg={false} className="h-16 w-16 mx-auto" />
+          <div className="w-16 h-16 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto border border-white/20 shadow-lg">
+            <img src="/mark/mark-white-outlined.png" className="w-8 h-8 object-contain" alt="CareMe" />
+          </div>
           <div className="space-y-3">
             <h3 className="text-3xl font-extrabold tracking-tight">Welcome to Careme</h3>
             <p className="text-base text-primary-200/90 leading-relaxed font-light">

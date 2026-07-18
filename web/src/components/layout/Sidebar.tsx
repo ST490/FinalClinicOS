@@ -1,13 +1,12 @@
 import { useLocation, Link } from 'react-router-dom';
 import { useRole } from '../../context/RoleContext';
 import { useAuth } from '../../context/AuthContext';
-import Logo from '../Logo';
 import { navigationByRole } from '../../lib/constants';
 import {
   LayoutDashboard, BarChart3, Building2, CreditCard, Users, Package,
   FileBarChart, Settings, UserRound, CalendarDays, Receipt, Palette,
   FileText, Pill, HeartPulse, Bell, AlertTriangle, ShoppingCart,
-  UserPlus, ListOrdered, UserCheck, X, Stethoscope, Truck,
+  UserPlus, ListOrdered, UserCheck, X, Truck,
   FolderOpen, ClipboardList, PersonStanding, CalendarCheck, Banknote,
   CalendarOff, Shield, ClipboardCheck, Clock, LogOut,
   ShieldCheck, Network, UserSearch,
@@ -61,7 +60,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Logo / Brand */}
         <div className="h-16 px-5 border-b border-border-light flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group overflow-hidden">
-            <Logo variant="horizontal" className="h-7" />
+            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow shrink-0">
+              <img src="/mark/mark-white-outlined.png" className="w-4 h-4 object-contain" alt="" />
+            </div>
+            <img src="/wordmark/wordmark-standard.png" className="h-5 w-auto dark:hidden" alt="CareMe" />
+            <img src="/wordmark/wordmark-allwhite.png" className="h-5 w-auto hidden dark:block" alt="CareMe" />
           </Link>
           <button
             onClick={onClose}
