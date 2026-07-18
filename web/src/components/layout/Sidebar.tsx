@@ -1,6 +1,7 @@
 import { useLocation, Link } from 'react-router-dom';
 import { useRole } from '../../context/RoleContext';
 import { useAuth } from '../../context/AuthContext';
+import Logo from '../Logo';
 import { navigationByRole } from '../../lib/constants';
 import {
   LayoutDashboard, BarChart3, Building2, CreditCard, Users, Package,
@@ -60,12 +61,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         {/* Logo / Brand */}
         <div className="h-16 px-5 border-b border-border-light flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2.5 group overflow-hidden">
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow shrink-0">
-              <Stethoscope className="w-4.5 h-4.5 text-white" />
-            </div>
-            <span className="text-sm font-bold text-text-primary tracking-tight truncate max-w-[160px]">
-              {organization?.name || 'Careme'}
-            </span>
+            <Logo variant="horizontal" className="h-7" />
           </Link>
           <button
             onClick={onClose}
