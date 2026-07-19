@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               status: c.status,
             }));
             setClinics(mapped);
-            setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));
+            setClinic(mapped[0] ?? null);
           } catch {
             // If clinics endpoint fails, at least the user is authenticated
           }
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgId: c.orgId,
       }));
       setClinics(mapped);
-      setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));
+      setClinic(mapped[0] ?? null);
     } catch {
       // Non-fatal — user has no clinics yet (post-signup case)
     }
@@ -347,7 +347,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgId: c.orgId,
       }));
       setClinics(mapped);
-      setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));
+      setClinic(mapped[0] ?? null);
     } catch {
       // Non-fatal
     }
@@ -389,7 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgId: c.orgId,
       }));
       setClinics(mapped);
-      setClinic(primaryRole === 'MASTER' ? null : (mapped[0] ?? null));
+      setClinic(mapped[0] ?? null);
     } catch {
       // Non-fatal
     }
