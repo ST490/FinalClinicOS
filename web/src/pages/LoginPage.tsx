@@ -139,10 +139,21 @@ export default function LoginPage() {
             </form>
           ) : (
             <form className="space-y-4" onSubmit={handleRealLogin}>
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
-                <strong>Tip</strong> Use the credentials from your seeded database
-                (e.g. <code className="bg-blue-100 px-1 rounded">doctor@apexmedical.com</code> /
-                <code className="bg-blue-100 px-1 rounded">password123</code>)
+              <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex flex-col gap-1">
+                  <strong>Client Demo Available</strong>
+                  <span className="text-blue-600/80">Experience the product as a clinic owner.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmail('kane@gmail.com');
+                    setPassword('password@123');
+                  }}
+                  className="shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-sm active:scale-95"
+                >
+                  Try Demo Account
+                </button>
               </div>
               <div>
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Email Address</label>
