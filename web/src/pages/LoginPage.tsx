@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Loader2, CheckCircle2, ShieldAlert, UserPlus } from 'lucide-react';
+import { Loader2, CheckCircle2, ShieldAlert, UserPlus, Sparkles, Crown, Building2, Stethoscope, UserCheck, Pill, Users } from 'lucide-react';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -139,38 +139,57 @@ export default function LoginPage() {
             </form>
           ) : (
             <form className="space-y-4" onSubmit={handleRealLogin}>
-              <div className="p-4 bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 border border-blue-200/80 rounded-xl space-y-2.5">
+              {/* Interactive Demo Switcher */}
+              <div className="p-4 rounded-xl border border-primary-500/30 bg-primary-500/5 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">Interactive Client Demo</span>
-                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/80 px-2 py-0.5 rounded-full">Select Role</span>
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Interactive Demo Roles</span>
+                  </div>
+                  <span className="text-[10px] font-semibold text-primary-600 dark:text-primary-300 bg-primary-500/10 border border-primary-500/20 px-2 py-0.5 rounded-full">
+                    Quick Select
+                  </span>
                 </div>
-                <p className="text-xs text-text-secondary">Click any role below to experience Careme from that staff perspective:</p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                
+                <p className="text-xs text-text-secondary">
+                  Click any role below to load pre-seeded demo credentials:
+                </p>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-0.5">
                   {[
-                    { label: 'CEO / Owner', email: 'kane@gmail.com' },
-                    { label: 'Branch Mgr', email: 'manager.kane@gmail.com' },
-                    { label: 'Nurse', email: 'nurse.kane@gmail.com' },
-                    { label: 'Front Desk', email: 'reception.kane@gmail.com' },
-                    { label: 'Pharmacist', email: 'pharmacy.kane@gmail.com' },
-                    { label: 'HR Manager', email: 'hr.kane@gmail.com' },
-                  ].map((demo) => (
-                    <button
-                      key={demo.email}
-                      type="button"
-                      onClick={() => {
-                        setEmail(demo.email);
-                        setPassword('password@123');
-                      }}
-                      className={`text-left text-xs p-2 rounded-lg border transition-all ${
-                        email === demo.email
-                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-semibold'
-                          : 'bg-white hover:bg-blue-50 text-text-primary border-border hover:border-blue-300'
-                      }`}
-                    >
-                      <div className="truncate font-medium">{demo.label}</div>
-                      <div className={`text-[10px] truncate ${email === demo.email ? 'text-blue-100' : 'text-text-muted'}`}>{demo.email}</div>
-                    </button>
-                  ))}
+                    { label: 'CEO / Owner', email: 'kane@gmail.com', icon: Crown },
+                    { label: 'Branch Mgr', email: 'manager.kane@gmail.com', icon: Building2 },
+                    { label: 'Nurse', email: 'nurse.kane@gmail.com', icon: Stethoscope },
+                    { label: 'Front Desk', email: 'reception.kane@gmail.com', icon: UserCheck },
+                    { label: 'Pharmacist', email: 'pharmacy.kane@gmail.com', icon: Pill },
+                    { label: 'HR Manager', email: 'hr.kane@gmail.com', icon: Users },
+                  ].map((demo) => {
+                    const Icon = demo.icon;
+                    const isSelected = email === demo.email;
+                    return (
+                      <button
+                        key={demo.email}
+                        type="button"
+                        onClick={() => {
+                          setEmail(demo.email);
+                          setPassword('password@123');
+                        }}
+                        className={`text-left p-2.5 rounded-lg border transition-all flex flex-col justify-between gap-1.5 group cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary-600 border-primary-500 text-white shadow-md shadow-primary-500/20 font-semibold'
+                            : 'bg-surface-card hover:bg-surface border-border hover:border-primary-500/40 text-text-primary'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-medium truncate">{demo.label}</span>
+                          <Icon className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-primary-500'}`} />
+                        </div>
+                        <div className={`text-[10px] truncate ${isSelected ? 'text-primary-100' : 'text-text-muted'}`}>
+                          {demo.email}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               <div>
