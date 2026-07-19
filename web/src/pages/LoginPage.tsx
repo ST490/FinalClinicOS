@@ -139,21 +139,39 @@ export default function LoginPage() {
             </form>
           ) : (
             <form className="space-y-4" onSubmit={handleRealLogin}>
-              <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl text-xs text-blue-800 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <strong>Client Demo Available</strong>
-                  <span className="text-blue-600/80">Experience the product as a clinic owner.</span>
+              <div className="p-4 bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 border border-blue-200/80 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-900 uppercase tracking-wider">Interactive Client Demo</span>
+                  <span className="text-[10px] font-semibold text-blue-600 bg-blue-100/80 px-2 py-0.5 rounded-full">Select Role</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEmail('kane@gmail.com');
-                    setPassword('password@123');
-                  }}
-                  className="shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-sm active:scale-95"
-                >
-                  Try Demo Account
-                </button>
+                <p className="text-xs text-text-secondary">Click any role below to experience Careme from that staff perspective:</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                  {[
+                    { label: 'CEO / Owner', email: 'kane@gmail.com' },
+                    { label: 'Branch Mgr', email: 'manager.kane@gmail.com' },
+                    { label: 'Nurse', email: 'nurse.kane@gmail.com' },
+                    { label: 'Front Desk', email: 'reception.kane@gmail.com' },
+                    { label: 'Pharmacist', email: 'pharmacy.kane@gmail.com' },
+                    { label: 'HR Manager', email: 'hr.kane@gmail.com' },
+                  ].map((demo) => (
+                    <button
+                      key={demo.email}
+                      type="button"
+                      onClick={() => {
+                        setEmail(demo.email);
+                        setPassword('password@123');
+                      }}
+                      className={`text-left text-xs p-2 rounded-lg border transition-all ${
+                        email === demo.email
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-sm font-semibold'
+                          : 'bg-white hover:bg-blue-50 text-text-primary border-border hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="truncate font-medium">{demo.label}</div>
+                      <div className={`text-[10px] truncate ${email === demo.email ? 'text-blue-100' : 'text-text-muted'}`}>{demo.email}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Email Address</label>

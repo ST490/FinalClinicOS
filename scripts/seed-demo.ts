@@ -13,9 +13,17 @@ const prisma = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionStr
 const ORG_NAME = 'Kane Medical Group';
 const CLINIC_NAME = 'Kane Primary Care';
 const COUNTRY = 'US';
-const DEMO_EMAIL = 'kane@gmail.com';
 const DEMO_PASSWORD = 'password@123';
 const BCRYPT_ROUNDS = 12;
+
+const DEMO_ROLES = [
+  { role: 'MASTER',       email: 'kane@gmail.com',            name: 'Dr. Kane (Owner & Doctor)', isOrgOwner: true },
+  { role: 'SUB_MASTER',   email: 'manager.kane@gmail.com',     name: 'Marcus Vance (Branch Manager)', isOrgOwner: false },
+  { role: 'NURSE',        email: 'nurse.kane@gmail.com',       name: 'Sarah Jenkins (Lead Nurse)', isOrgOwner: false },
+  { role: 'RECEPTIONIST', email: 'reception.kane@gmail.com',   name: 'Alex Rivera (Front Desk)', isOrgOwner: false },
+  { role: 'PHARMACIST',   email: 'pharmacy.kane@gmail.com',    name: 'Emily Chen (Pharmacist)', isOrgOwner: false },
+  { role: 'HR',           email: 'hr.kane@gmail.com',          name: 'David Miller (HR Director)', isOrgOwner: false },
+] as const;
 
 async function main() {
   const passwordHash = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_ROUNDS);
@@ -50,67 +58,40 @@ async function main() {
     },
   });
 
-  // 3. Create User
-  const user = await prisma.user.upsert({
-    where: { email: DEMO_EMAIL },
-    update: { orgId: org.id, passwordHash, status: 'ACTIVE', isOrgOwner: true },
-    create: {
-      email: DEMO_EMAIL,
-      name: 'Dr. Kane',
-      passwordHash,
-      orgId: org.id,
-      status: 'ACTIVE',
-      isOrgOwner: true,
-      twoFactorEnabled: false,
-    },
-  });
-
-  // Create DOCTOR role for this clinic
-  await prisma.userClinicRole.upsert({
-    where: { userId_clinicId: { userId: user.id, clinicId: clinic.id } },
-    update: { status: 'ACTIVE', role: 'DOCTOR', isPrimary: true },
-    create: {
-      userId: user.id,
-      clinicId: clinic.id,
-      role: 'DOCTOR',
-      isPrimary: true,
-      status: 'ACTIVE',
-    },
-  });
-
-  // 4. Create Staff Members
-  const staffMembers = [
-    { name: 'Sarah Nurse', email: 'nurse.kane@gmail.com', role: 'NURSE' as const },
-    { name: 'Alex Frontdesk', email: 'reception.kane@gmail.com', role: 'RECEPTIONIST' as const },
-  ];
-
-  for (const s of staffMembers) {
-    const st = await prisma.user.upsert({
-      where: { email: s.email },
-      update: { status: 'ACTIVE' },
+  // 3. Create Users for each Role
+  for (const profile of DEMO_ROLES) {
+    const user = await prisma.user.upsert({
+      where: { email: profile.email },
+      update: { orgId: org.id, passwordHash, status: 'ACTIVE', isOrgOwner: profile.isOrgOwner },
       create: {
-        email: s.email,
-        name: s.name,
+        email: profile.email,
+        name: profile.name,
         passwordHash,
         orgId: org.id,
         status: 'ACTIVE',
+        isOrgOwner: profile.isOrgOwner,
+        twoFactorEnabled: false,
       },
     });
 
-    await prisma.userClinicRole.upsert({
-      where: { userId_clinicId: { userId: st.id, clinicId: clinic.id } },
-      update: { status: 'ACTIVE', role: s.role, isPrimary: true },
-      create: {
-        userId: st.id,
-        clinicId: clinic.id,
-        role: s.role,
-        isPrimary: true,
-        status: 'ACTIVE',
-      },
-    });
+    if (profile.role !== 'MASTER') {
+      await prisma.userClinicRole.upsert({
+        where: { userId_clinicId: { userId: user.id, clinicId: clinic.id } },
+        update: { status: 'ACTIVE', role: profile.role as any, isPrimary: true },
+        create: {
+          userId: user.id,
+          clinicId: clinic.id,
+          role: profile.role as any,
+          isPrimary: true,
+          status: 'ACTIVE',
+        },
+      });
+    }
   }
 
-  // 5. Create Mock Patients
+  const ownerUser = await prisma.user.findUniqueOrThrow({ where: { email: 'kane@gmail.com' } });
+
+  // 4. Create Mock Patients
   const patientsData = [
     { name: 'John Doe', email: 'john@example.com', phone: '+1234567890', gender: Gender.MALE },
     { name: 'Jane Smith', email: 'jane@example.com', phone: '+1234567891', gender: Gender.FEMALE },
@@ -135,14 +116,14 @@ async function main() {
           email: p.email,
           phone: p.phone,
           gender: p.gender,
-          createdById: user.id,
+          createdById: ownerUser.id,
         },
       });
       createdPatients.push(newP);
     }
   }
 
-  // 6. Create Patient Visits & Dues/Revenue
+  // 5. Create Patient Visits & Dues/Revenue
   for (let i = 0; i < createdPatients.length; i++) {
     const patient = createdPatients[i];
     const visit = await prisma.patientVisit.create({
@@ -150,15 +131,14 @@ async function main() {
         clinicId: clinic.id,
         orgId: org.id,
         patientId: patient.id,
-        doctorId: user.id,
-        createdById: user.id,
+        doctorId: ownerUser.id,
+        createdById: ownerUser.id,
         chiefComplaint: i % 2 === 0 ? 'Routine Health Checkup' : 'Seasonal Allergy & Fever',
         diagnosis: i % 2 === 0 ? 'Healthy / Normal' : 'Mild Upper Respiratory Infection',
         status: 'COMPLETED',
       }
     });
 
-    // Create Dues for Revenue calculation
     await prisma.due.create({
       data: {
         clinicId: clinic.id,
@@ -168,17 +148,17 @@ async function main() {
         amountPaid: 150.00,
         amountDue: 0.00,
         status: 'PAID',
-        recordedById: user.id,
+        recordedById: ownerUser.id,
       }
     });
   }
 
-  // 7. Create Mock Appointments
+  // 6. Create Mock Appointments
   const now = new Date();
   for (let i = 0; i < createdPatients.length; i++) {
     const patient = createdPatients[i];
     const slotStart = new Date(now);
-    slotStart.setHours(9 + i, 0, 0, 0); // Today's appointments at 9am, 10am, 11am...
+    slotStart.setHours(9 + i, 0, 0, 0);
     
     const slotEnd = new Date(slotStart);
     slotEnd.setMinutes(30);
@@ -188,23 +168,23 @@ async function main() {
         clinicId: clinic.id,
         orgId: org.id,
         patientId: patient.id,
-        doctorId: user.id,
+        doctorId: ownerUser.id,
         slotStart,
         slotEnd,
         status: i === 0 ? 'COMPLETED' : i === 1 ? 'IN_PROGRESS' : 'BOOKED',
-        createdById: user.id,
+        createdById: ownerUser.id,
         category: i === 0 ? 'FIRST_TIME' : 'RETURNING',
         type: 'SCHEDULED'
       }
     });
   }
 
-  // 8. Create Mock Inventory
+  // 7. Create Mock Inventory
   const inventoryItems = [
     { customName: 'Amoxicillin 500mg', quantity: 120, reorderThreshold: 20, unitPrice: 15.00, sellingPrice: 25.00 },
-    { customName: 'Paracetamol 650mg', quantity: 8, reorderThreshold: 15, unitPrice: 2.00, sellingPrice: 5.00 }, // Low stock!
+    { customName: 'Paracetamol 650mg', quantity: 8, reorderThreshold: 15, unitPrice: 2.00, sellingPrice: 5.00 },
     { customName: 'Surgical Gloves (Box)', quantity: 45, reorderThreshold: 10, unitPrice: 12.00, sellingPrice: 20.00 },
-    { customName: 'Thermometer Digital', quantity: 4, reorderThreshold: 5, unitPrice: 8.00, sellingPrice: 15.00 }, // Low stock!
+    { customName: 'Thermometer Digital', quantity: 4, reorderThreshold: 5, unitPrice: 8.00, sellingPrice: 15.00 },
   ];
 
   for (const item of inventoryItems) {
@@ -217,14 +197,15 @@ async function main() {
         reorderThreshold: item.reorderThreshold,
         unitPrice: item.unitPrice,
         sellingPrice: item.sellingPrice,
-        createdById: user.id,
+        createdById: ownerUser.id,
       }
     });
   }
 
-  console.log('✔ Rich Demo account seeded successfully!');
-  console.log(`  Email: ${DEMO_EMAIL}`);
-  console.log(`  Password: ${DEMO_PASSWORD}`);
+  console.log('✔ All role demo accounts seeded successfully!');
+  for (const profile of DEMO_ROLES) {
+    console.log(`  ${profile.role.padEnd(12)} ${profile.email}`);
+  }
 }
 
 main()
