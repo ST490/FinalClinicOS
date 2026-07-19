@@ -111,7 +111,7 @@ export default function App() {
         <BrowserRouter>
           <RoleProvider>
             <AuthenticatedApp />
-            {SHOW_DEMO_SWITCHER && <DemoSwitcher />}
+            {SHOW_DEMO_SWITCHER && useAuth().email === 'kane@gmail.com' && <DemoSwitcher />}
           </RoleProvider>
         </BrowserRouter>
       </AuthProvider>

@@ -7,7 +7,7 @@ import type {
 
 // ─── Global Feature Flags ───
 export const SHOW_DEMO_DATA = false;
-export const SHOW_DEMO_SWITCHER = false;
+export const SHOW_DEMO_SWITCHER = true;
 
 // ─── Navigation Config Per Role ───
 export const navigationByRole: Record<UserRole, NavItem[]> = {
