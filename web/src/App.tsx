@@ -104,6 +104,11 @@ function AuthenticatedApp() {
   );
 }
 
+function DemoSwitcherGate() {
+  const { email } = useAuth();
+  return email === 'kane@gmail.com' ? <DemoSwitcher /> : null;
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -111,7 +116,7 @@ export default function App() {
         <BrowserRouter>
           <RoleProvider>
             <AuthenticatedApp />
-            {SHOW_DEMO_SWITCHER && useAuth().email === 'kane@gmail.com' && <DemoSwitcher />}
+            {SHOW_DEMO_SWITCHER && <DemoSwitcherGate />}
           </RoleProvider>
         </BrowserRouter>
       </AuthProvider>
