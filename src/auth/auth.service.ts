@@ -84,30 +84,6 @@ class AuthService {
     const primaryRole = user.clinicRoles.find(r => r.isPrimary) || user.clinicRoles[0];
     const activeClinicId = primaryRole?.clinicId || null;
 
-    if (user.twoFactorEnabled) {
-      const tempToken = generateAccessToken({
-        sub: user.id, orgId: user.orgId, activeClinicId,
-        roles: user.clinicRoles.map(r => r.role), isOrgOwner: user.isOrgOwner, is2FAEnabled: true,
-      });
-      return { tokens: { accessToken: tempToken, refreshToken: '', expiresIn: 300 }, user: this.formatUserProfile(user, user.clinicRoles, user.orgId), requires2FA: true, tempToken };
-    }
-
-    // 2FA ENFORCEMENT: org owners WITH an enrolled secret must pass 2FA.
-    // Fresh owners (no secret yet) log in normally and enroll later in Settings.
-    if (user.isOrgOwner && user.twoFactorSecret) {
-      const tempToken = generateAccessToken({
-        sub: user.id, orgId: user.orgId, activeClinicId,
-        roles: user.clinicRoles.map(r => r.role), isOrgOwner: user.isOrgOwner, is2FAEnabled: false,
-      });
-      return {
-        tokens: { accessToken: tempToken, refreshToken: '', expiresIn: 300 },
-        user: this.formatUserProfile(user, user.clinicRoles, user.orgId),
-        requires2FA: true,
-        tempToken,
-        message: '2FA is required for org owners. Please set up two-factor authentication.',
-      };
-    }
-
     const refreshToken = generateRefreshToken();
     await this.saveRefreshToken(this.prisma, user.id, refreshToken);
     const tokens = await this.generateTokens(user, activeClinicId, refreshToken);
