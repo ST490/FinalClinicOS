@@ -4,11 +4,12 @@ import { billingService } from './billing.service.js';
 import { patientService } from '../patients/patient.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
-async function verifyDueAccess(req: Request, res: Response): Promise<any> {
-  const due = await billingService.getDue(req.params.id as string);
+async function verifyDueAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const due = await billingService.getDue(req.params.id as string, tx);
   if (!due) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Due record not found' } });
     return null;
@@ -74,58 +75,58 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/dues', authenticate, loadUserRoles, checkPerm('dues:manage'), requireClinicAccess, async (req, res, next) => {
+router.post('/dues', authenticate, loadUserRoles, checkPerm('dues:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const due = await billingService.createDue({ ...createDueSchema.parse(req.body), recordedById: req.user!.id });
+    const due = await billingService.createDue({ ...createDueSchema.parse(req.body), recordedById: req.user!.id }, tx);
     res.status(201).json(due);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/dues', authenticate, loadUserRoles, checkPerm('dues:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/dues', authenticate, loadUserRoles, checkPerm('dues:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await billingService.search(searchSchema.parse(req.query));
+    const result = await billingService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/dues/:id', authenticate, loadUserRoles, checkPerm('dues:read'), async (req, res, next) => {
+router.get('/dues/:id', authenticate, loadUserRoles, checkPerm('dues:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const due = await verifyDueAccess(req, res);
+    const due = await verifyDueAccess(req, res, tx);
     if (!due) return;
     res.json(due);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/dues/patient/:patientId/balance', authenticate, loadUserRoles, checkPerm('dues:read'), async (req, res, next) => {
+router.get('/dues/patient/:patientId/balance', authenticate, loadUserRoles, checkPerm('dues:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const patient = await patientService.findById(req.params.patientId as string);
+    const patient = await patientService.findById(req.params.patientId as string, tx);
     if (!patient) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     if (req.user!.isOrgOwner) {
       if (patient.orgId !== req.user!.orgId) { res.status(403).json({ error: { code: 'FORBIDDEN' } }); return; }
     } else {
       if (!req.user!.roles.some(r => r.clinicId === patient.clinicId)) { res.status(403).json({ error: { code: 'FORBIDDEN' } }); return; }
     }
-    const balance = await billingService.getPatientBalance(req.params.patientId as string);
+    const balance = await billingService.getPatientBalance(req.params.patientId as string, tx);
     res.json(balance);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/dues/:id/pay', authenticate, loadUserRoles, checkPerm('dues:manage'), async (req, res, next) => {
+router.post('/dues/:id/pay', authenticate, loadUserRoles, checkPerm('dues:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const due = await verifyDueAccess(req, res);
+    const due = await verifyDueAccess(req, res, tx);
     if (!due) return;
-    const result = await billingService.recordPayment(req.params.id as string, { ...paymentSchema.parse(req.body), recordedById: req.user!.id });
+    const result = await billingService.recordPayment(req.params.id as string, { ...paymentSchema.parse(req.body), recordedById: req.user!.id }, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/dues/:id/waive', authenticate, loadUserRoles, checkPerm('dues:waive'), async (req, res, next) => {
+router.post('/dues/:id/waive', authenticate, loadUserRoles, checkPerm('dues:waive'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const due = await verifyDueAccess(req, res);
+    const due = await verifyDueAccess(req, res, tx);
     if (!due) return;
-    const result = await billingService.waiveDue(req.params.id as string, { ...waiveSchema.parse(req.body), waivedById: req.user!.id });
+    const result = await billingService.waiveDue(req.params.id as string, { ...waiveSchema.parse(req.body), waivedById: req.user!.id }, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

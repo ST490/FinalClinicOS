@@ -4,11 +4,12 @@ import { visitService } from './visit.service.js';
 import { patientService } from '../patients/patient.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
-async function verifyVisitAccess(req: Request, res: Response): Promise<any> {
-  const visit = await visitService.findById(req.params.id as string);
+async function verifyVisitAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const visit = await visitService.findById(req.params.id as string, tx);
   if (!visit) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Visit not found' } });
     return null;
@@ -67,58 +68,58 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/visits', authenticate, loadUserRoles, checkPerm('patient:create'), requireClinicAccess, async (req, res, next) => {
+router.post('/visits', authenticate, loadUserRoles, checkPerm('patient:create'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const visit = await visitService.create({ ...createSchema.parse(req.body), createdById: req.user!.id });
+    const visit = await visitService.create({ ...createSchema.parse(req.body), createdById: req.user!.id }, tx);
     res.status(201).json(visit);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/visits', authenticate, loadUserRoles, checkPerm('patient:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/visits', authenticate, loadUserRoles, checkPerm('patient:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await visitService.search(searchSchema.parse(req.query));
+    const result = await visitService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:read'), async (req, res, next) => {
+router.get('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const visit = await verifyVisitAccess(req, res);
+    const visit = await verifyVisitAccess(req, res, tx);
     if (!visit) return;
     res.json(visit);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:update'), async (req, res, next) => {
+router.patch('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:update'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const visit = await verifyVisitAccess(req, res);
+    const visit = await verifyVisitAccess(req, res, tx);
     if (!visit) return;
-    const updated = await visitService.update(req.params.id as string, updateSchema.parse(req.body));
+    const updated = await visitService.update(req.params.id as string, updateSchema.parse(req.body), tx);
     res.json(updated);
   } catch (e) { next(e); }
-});
+}));
 
-router.delete('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:delete'), async (req, res, next) => {
+router.delete('/visits/:id', authenticate, loadUserRoles, checkPerm('patient:delete'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const visit = await verifyVisitAccess(req, res);
+    const visit = await verifyVisitAccess(req, res, tx);
     if (!visit) return;
-    await visitService.delete(req.params.id as string, req.user!.id);
+    await visitService.delete(req.params.id as string, req.user!.id, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/visits/patient/:patientId/stats', authenticate, loadUserRoles, checkPerm('patient:read'), async (req, res, next) => {
+router.get('/visits/patient/:patientId/stats', authenticate, loadUserRoles, checkPerm('patient:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const patient = await patientService.findById(req.params.patientId as string);
+    const patient = await patientService.findById(req.params.patientId as string, tx);
     if (!patient) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     if (req.user!.isOrgOwner) {
       if (patient.orgId !== req.user!.orgId) { res.status(403).json({ error: { code: 'FORBIDDEN' } }); return; }
     } else {
       if (!req.user!.roles.some(r => r.clinicId === patient.clinicId)) { res.status(403).json({ error: { code: 'FORBIDDEN' } }); return; }
     }
-    const stats = await visitService.getPatientStats(req.params.patientId as string);
+    const stats = await visitService.getPatientStats(req.params.patientId as string, tx);
     res.json(stats);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

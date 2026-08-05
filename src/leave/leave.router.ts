@@ -1,8 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
 import { leaveService } from './leave.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -47,12 +48,12 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/leave', authenticate, loadUserRoles, checkPerm('leave:manage'), async (req, res, next) => {
+router.post('/leave', authenticate, loadUserRoles, checkPerm('leave:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const leave = await leaveService.create(createSchema.parse(req.body));
+    const leave = await leaveService.create(createSchema.parse(req.body), tx);
     res.status(201).json(leave);
   } catch (e) { next(e); }
-});
+}));
 
 // Self-service: any authenticated user requests leave for themselves.
 const selfRequestSchema = z.object({
@@ -62,7 +63,7 @@ const selfRequestSchema = z.object({
   type: z.string().min(1),
   reason: z.string().optional(),
 });
-router.post('/leave/request', authenticate, loadUserRoles, async (req, res, next) => {
+router.post('/leave/request', authenticate, loadUserRoles, withTenantHandler(async (req, res, next, tx) => {
   try {
     const body = selfRequestSchema.parse(req.body);
     const userId = req.user!.id;
@@ -74,34 +75,34 @@ router.post('/leave/request', authenticate, loadUserRoles, async (req, res, next
       toDate: body.toDate,
       days: Math.max(1, Math.round((new Date(body.toDate).getTime() - new Date(body.fromDate).getTime()) / 86400000) + 1),
       reason: body.reason,
-    });
+    }, tx);
     res.status(201).json(leave);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/leave', authenticate, loadUserRoles, checkPerm('leave:read'), async (req, res, next) => {
+router.get('/leave', authenticate, loadUserRoles, checkPerm('leave:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await leaveService.list(listSchema.parse(req.query));
+    const result = await leaveService.list(listSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/leave/:id/status', authenticate, loadUserRoles, checkPerm('leave:manage'), async (req, res, next) => {
+router.post('/leave/:id/status', authenticate, loadUserRoles, checkPerm('leave:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const leave = await leaveService.updateStatus(req.params.id as string, {
       ...statusSchema.parse(req.body),
       reviewedById: req.user!.id,
-    });
+    }, tx);
     res.json(leave);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/leave/balances', authenticate, loadUserRoles, checkPerm('leave:read'), async (req, res, next) => {
+router.get('/leave/balances', authenticate, loadUserRoles, checkPerm('leave:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const { clinicId, year } = balancesSchema.parse(req.query);
-    const balances = await leaveService.balances(clinicId, year);
+    const balances = await leaveService.balances(clinicId, year, tx);
     res.json(balances);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

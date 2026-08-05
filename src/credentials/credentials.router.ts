@@ -4,7 +4,7 @@ import { credentialsService } from './credentials.service.js';
 import { CREDENTIAL_TYPES, type CredentialType } from './credentials.types.js';
 import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
-import { withTenant } from '../config/tenant-session.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -52,37 +52,37 @@ const listSchema = z.object({
   expiringWithinDays: z.coerce.number().min(0).max(365).optional(),
 });
 
-router.post('/credentials', authenticate, loadUserRoles, checkPerm('credential:manage'), async (req, res, next) => {
+router.post('/credentials', authenticate, loadUserRoles, checkPerm('credential:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const body = createSchema.parse(req.body);
     const cred = await credentialsService.create(body, {
       userId: req.user!.id,
       ip: req.ip,
       ua: req.headers['user-agent'],
-    });
+    }, tx);
     res.status(201).json(cred);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.get('/credentials', authenticate, loadUserRoles, checkPerm('credential:read'), async (req, res, next) => {
+router.get('/credentials', authenticate, loadUserRoles, checkPerm('credential:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const q = listSchema.parse(req.query);
     // Tenant isolation: org owners get their org; staff are pinned to their clinics.
     const clinicIds = req.user!.roles.map((r) => r.clinicId).filter(Boolean) as string[];
-    const creds = await withTenant(req, () => credentialsService.list({
+    const creds = await credentialsService.list({
       ...q,
       orgId: req.user!.orgId,
       clinicId: req.user!.isOrgOwner ? (q.clinicId ?? undefined) : (q.clinicId ?? clinicIds),
-    }));
+    }, tx);
     res.json(creds);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.patch('/credentials/:id', authenticate, loadUserRoles, checkPerm('credential:manage'), async (req, res, next) => {
+router.patch('/credentials/:id', authenticate, loadUserRoles, checkPerm('credential:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const body = updateSchema.parse(req.body);
     const cred = await credentialsService.update(String(req.params.id), body, {
@@ -91,14 +91,14 @@ router.patch('/credentials/:id', authenticate, loadUserRoles, checkPerm('credent
       orgId: req.body.orgId ?? '',
       ip: req.ip,
       ua: req.headers['user-agent'] as string | undefined,
-    });
+    }, tx);
     res.json(cred);
   } catch (err) {
     next(err);
   }
-});
+}));
 
-router.delete('/credentials/:id', authenticate, loadUserRoles, checkPerm('credential:manage'), async (req, res, next) => {
+router.delete('/credentials/:id', authenticate, loadUserRoles, checkPerm('credential:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
     await credentialsService.delete(String(req.params.id), {
       userId: req.user!.id,
@@ -106,11 +106,11 @@ router.delete('/credentials/:id', authenticate, loadUserRoles, checkPerm('creden
       orgId: String(req.query.orgId ?? ''),
       ip: req.ip,
       ua: req.headers['user-agent'] as string | undefined,
-    });
+    }, tx);
     res.status(204).send();
   } catch (err) {
     next(err);
   }
-});
+}));
 
 export default router;

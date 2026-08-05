@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { inventoryService } from './inventory.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -13,8 +14,8 @@ function viewerOf(req: Request) {
   };
 }
 
-async function verifyInventoryAccess(req: Request, res: Response): Promise<any> {
-  const item = await inventoryService.findById(req.params.id as string);
+async function verifyInventoryAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const item = await inventoryService.findById(req.params.id as string, tx);
   if (!item) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Inventory item not found' } });
     return null;
@@ -128,93 +129,93 @@ function checkPerm(permission: Permission) {
 }
 
 // CRUD
-router.post('/inventory', authenticate, loadUserRoles, checkPerm('inventory:manage'), requireClinicAccess, async (req, res, next) => {
+router.post('/inventory', authenticate, loadUserRoles, checkPerm('inventory:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await inventoryService.create({ ...createSchema.parse(req.body), createdById: req.user!.id });
+    const item = await inventoryService.create({ ...createSchema.parse(req.body), createdById: req.user!.id }, tx);
     res.status(201).json(item);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/inventory', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/inventory', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await inventoryService.search({ ...searchSchema.parse(req.query), viewer: viewerOf(req) });
+    const result = await inventoryService.search({ ...searchSchema.parse(req.query), viewer: viewerOf(req) }, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:read'), async (req, res, next) => {
+router.get('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
     res.json(item);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:manage'), async (req, res, next) => {
+router.patch('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
-    const updated = await inventoryService.update(req.params.id as string, updateSchema.parse(req.body));
+    const updated = await inventoryService.update(req.params.id as string, updateSchema.parse(req.body), tx);
     res.json(updated);
   } catch (e) { next(e); }
-});
+}));
 
-router.delete('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:manage'), async (req, res, next) => {
+router.delete('/inventory/:id', authenticate, loadUserRoles, checkPerm('inventory:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
-    await inventoryService.delete(req.params.id as string);
+    await inventoryService.delete(req.params.id as string, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
 // Stock operations
-router.post('/inventory/:id/deduct', authenticate, loadUserRoles, checkPerm('inventory:manage'), async (req, res, next) => {
+router.post('/inventory/:id/deduct', authenticate, loadUserRoles, checkPerm('inventory:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
     const { quantity, referenceType, referenceId, secondSignatoryId } = deductSchema.parse(req.body);
     const result = await inventoryService.deductStock(
-      req.params.id as string, quantity, req.user!.id, referenceType, referenceId, secondSignatoryId
+      req.params.id as string, quantity, req.user!.id, referenceType, referenceId, secondSignatoryId, tx
     );
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/inventory/:id/adjust', authenticate, loadUserRoles, checkPerm('inventory:manage'), async (req, res, next) => {
+router.post('/inventory/:id/adjust', authenticate, loadUserRoles, checkPerm('inventory:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
     const movement = await inventoryService.adjustStock(
       req.params.id as string,
-      { ...adjustSchema.parse(req.body), performedById: req.user!.id }
+      { ...adjustSchema.parse(req.body), performedById: req.user!.id }, tx
     );
     res.status(201).json(movement);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/inventory/:id/history', authenticate, loadUserRoles, checkPerm('inventory:read'), async (req, res, next) => {
+router.get('/inventory/:id/history', authenticate, loadUserRoles, checkPerm('inventory:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const item = await verifyInventoryAccess(req, res);
+    const item = await verifyInventoryAccess(req, res, tx);
     if (!item) return;
-    const history = await inventoryService.getStockHistory(req.params.id as string);
+    const history = await inventoryService.getStockHistory(req.params.id as string, 50, tx);
     res.json(history);
   } catch (e) { next(e); }
-});
+}));
 
 // Alerts
-router.get('/alerts/low-stock/:clinicId', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/alerts/low-stock/:clinicId', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const alert = await inventoryService.getLowStockAlerts(req.params.clinicId as string);
+    const alert = await inventoryService.getLowStockAlerts(req.params.clinicId as string, tx);
     res.json(alert);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/alerts/expiring/:clinicId', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/alerts/expiring/:clinicId', authenticate, loadUserRoles, checkPerm('inventory:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const items = await inventoryService.getExpiringSoonAlerts(req.params.clinicId as string);
+    const items = await inventoryService.getExpiringSoonAlerts(req.params.clinicId as string, tx);
     res.json(items);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

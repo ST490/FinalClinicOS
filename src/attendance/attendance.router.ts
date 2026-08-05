@@ -1,8 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
 import { attendanceService } from './attendance.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -41,35 +42,35 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/attendance/clock-in', authenticate, loadUserRoles, checkPerm('attendance:manage'), async (req, res, next) => {
+router.post('/attendance/clock-in', authenticate, loadUserRoles, checkPerm('attendance:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const attendance = await attendanceService.clockIn({ ...clockInSchema.parse(req.body), recordedById: req.user!.id });
+    const attendance = await attendanceService.clockIn({ ...clockInSchema.parse(req.body), recordedById: req.user!.id }, tx);
     res.status(201).json(attendance);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/attendance/:id/clock-out', authenticate, loadUserRoles, checkPerm('attendance:manage'), async (req, res, next) => {
+router.post('/attendance/:id/clock-out', authenticate, loadUserRoles, checkPerm('attendance:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const attendance = await attendanceService.clockOut(req.params.id as string, { ...clockOutSchema.parse(req.body), recordedById: req.user!.id });
+    const attendance = await attendanceService.clockOut(req.params.id as string, { ...clockOutSchema.parse(req.body), recordedById: req.user!.id }, tx);
     res.json(attendance);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/attendance', authenticate, loadUserRoles, checkPerm('attendance:read'), async (req, res, next) => {
+router.get('/attendance', authenticate, loadUserRoles, checkPerm('attendance:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await attendanceService.search(searchSchema.parse(req.query));
+    const result = await attendanceService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/attendance/today/:clinicId', authenticate, loadUserRoles, checkPerm('attendance:read'), async (req, res, next) => {
+router.get('/attendance/today/:clinicId', authenticate, loadUserRoles, checkPerm('attendance:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const records = await attendanceService.getTodayAttendance(req.params.clinicId as string);
+    const records = await attendanceService.getTodayAttendance(req.params.clinicId as string, tx);
     res.json(records);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/attendance/summary/:clinicId', authenticate, loadUserRoles, checkPerm('attendance:read'), async (req, res, next) => {
+router.get('/attendance/summary/:clinicId', authenticate, loadUserRoles, checkPerm('attendance:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const { fromDate, toDate } = z.object({
       fromDate: z.string().optional(),
@@ -77,9 +78,9 @@ router.get('/attendance/summary/:clinicId', authenticate, loadUserRoles, checkPe
     }).parse(req.query);
     const from = fromDate ? new Date(fromDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const to = toDate ? new Date(toDate) : new Date();
-    const summary = await attendanceService.getSummary(req.params.clinicId as string, from, to);
+    const summary = await attendanceService.getSummary(req.params.clinicId as string, from, to, tx);
     res.json(summary);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

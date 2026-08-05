@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { orgService } from './org.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -57,44 +58,44 @@ function checkPerm(permission: Permission) {
 }
 
 // Organization routes
-router.post('/orgs', authenticate, loadUserRoles, checkPerm('org:manage'), async (req, res, next) => {
+router.post('/orgs', authenticate, loadUserRoles, checkPerm('org:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const org = await orgService.createOrg({ ...createOrgSchema.parse(req.body), createdById: req.user!.id });
+    const org = await orgService.createOrg({ ...createOrgSchema.parse(req.body), createdById: req.user!.id }, tx);
     res.status(201).json(org);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:read'), async (req, res, next) => {
+router.get('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const org = await orgService.getOrg(req.params.id as string);
+    const org = await orgService.getOrg(req.params.id as string, tx);
     if (!org) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     res.json(org);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'), async (req, res, next) => {
+router.patch('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const org = await orgService.updateOrg(req.params.id as string, req.body);
+    const org = await orgService.updateOrg(req.params.id as string, req.body, tx);
     res.json(org);
   } catch (e) { next(e); }
-});
+}));
 
-router.delete('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'), async (req, res, next) => {
+router.delete('/orgs/:id', authenticate, loadUserRoles, checkPerm('org:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    await orgService.deleteOrg(req.params.id as string);
+    await orgService.deleteOrg(req.params.id as string, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:create'), async (req, res, next) => {
+router.post('/clinics', authenticate, loadUserRoles, checkPerm('clinic:create'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const orgId = req.user!.orgId;
-    const clinic = await orgService.createClinic(orgId, { ...createClinicSchema.parse(req.body), createdById: req.user!.id });
+    const clinic = await orgService.createClinic(orgId, { ...createClinicSchema.parse(req.body), createdById: req.user!.id }, tx);
     res.status(201).json(clinic);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/clinics', authenticate, loadUserRoles, checkPerm('clinic:read'), async (req, res, next) => {
+router.get('/clinics', authenticate, loadUserRoles, checkPerm('clinic:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
     const query = searchSchema.parse(req.query);
     // Enforce tenant isolation
@@ -105,14 +106,14 @@ router.get('/clinics', authenticate, loadUserRoles, checkPerm('clinic:read'), as
       const myClinicIds = req.user!.roles.map((r) => r.clinicId).filter(Boolean);
       query.clinicIds = myClinicIds;
     }
-    const result = await orgService.searchClinics(query);
+    const result = await orgService.searchClinics(query, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const clinic = await orgService.getClinic(req.params.id as string);
+    const clinic = await orgService.getClinic(req.params.id as string, tx);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     // Enforce tenant isolation
     if (clinic.orgId !== req.user!.orgId) {
@@ -121,48 +122,48 @@ router.get('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:read')
     }
     res.json(clinic);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, async (req, res, next) => {
+router.patch('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const clinic = await orgService.getClinic(req.params.id as string);
+    const clinic = await orgService.getClinic(req.params.id as string, tx);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     // Enforce tenant isolation
     if (clinic.orgId !== req.user!.orgId) {
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
       return;
     }
-    const updated = await orgService.updateClinic(req.params.id as string, updateClinicSchema.parse(req.body));
+    const updated = await orgService.updateClinic(req.params.id as string, updateClinicSchema.parse(req.body), tx);
     res.json(updated);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, async (req, res, next) => {
+router.patch('/clinics/:id/branding', authenticate, loadUserRoles, checkPerm('clinic:update'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const clinic = await orgService.getClinic(req.params.id as string);
+    const clinic = await orgService.getClinic(req.params.id as string, tx);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     // Enforce tenant isolation
     if (clinic.orgId !== req.user!.orgId) {
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
       return;
     }
-    const updated = await orgService.updateBranding(req.params.id as string, brandingSchema.parse(req.body));
+    const updated = await orgService.updateBranding(req.params.id as string, brandingSchema.parse(req.body), tx);
     res.json(updated);
   } catch (e) { next(e); }
-});
+}));
 
-router.delete('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), requireClinicAccess, async (req, res, next) => {
+router.delete('/clinics/:id', authenticate, loadUserRoles, checkPerm('clinic:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const clinic = await orgService.getClinic(req.params.id as string);
+    const clinic = await orgService.getClinic(req.params.id as string, tx);
     if (!clinic) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
     // Enforce tenant isolation
     if (clinic.orgId !== req.user!.orgId) {
       res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
       return;
     }
-    await orgService.deleteClinic(req.params.id as string);
+    await orgService.deleteClinic(req.params.id as string, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

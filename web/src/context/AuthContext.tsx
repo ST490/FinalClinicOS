@@ -268,7 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const me = await authApi.me();
       const primaryRole: UserRole = me.isOrgOwner
         ? 'MASTER'
-        : (c ? (me.roles.find((r: any) => r.clinicId === c.id)?.role ?? me.roles[0]?.role ?? 'RECEPTIONIST') : 'RECEPTIONIST');
+        : (c ? (me.roles.find((r: any) => r.clinicId === c.id)?.role ?? me.roles[0]?.role ?? 'RECEPTIONIST') : (me.roles[0]?.role ?? 'RECEPTIONIST'));
       
       setUser({
         id: me.id,

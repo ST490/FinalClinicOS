@@ -3,9 +3,18 @@
 # the long-lived Express API + 2 worker processes + Redis + Postgres.
 # Apply via Render dashboard → New → Blueprint → connect this repo.
 #
-# NOTE: Prisma is pinned to 5.22.0 in the build command because Render's
-# `npm install` drifts to Prisma 7.x, which rejects `url`/`directUrl` in
-# schema.prisma (P1012). Our schema + code are Prisma 5 style. See CLAUDE.md.
+# NOTE: Prisma 7 requires a driver adapter. URLs live in prisma.config.ts,
+# not schema.prisma. Build passes `provider = "postgresql"`.
+#
+# ── RLS ROLE MODEL ───────────────────────────────────────────────────────
+# RLS is LIVE. Three Postgres roles are in play:
+#   careme_app    — NOSUPERUSER NOBYPASSRLS (app runtime — RLS enforced)
+#   careme_bypass — BYPASSRLS (workers — reads tenant rows without GUCs)
+#   postgres      — superuser (migrations/DDL only, via SUPERUSER_URL)
+#
+# DATABASE_URL + DIRECT_URL MUST point to careme_app (port 5432, session mode).
+# Transaction-mode pooler (6543) drops SET LOCAL state and breaks RLS.
+# SUPERUSER_URL is used by prisma.config.ts for `prisma migrate deploy`.
 
 services:
   # ── Web API (long-lived) ───────────────────────────────────────────────
@@ -15,16 +24,18 @@ services:
     plan: starter
     branch: main
     rootDir: .
-    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    buildCommand: npm install --legacy-peer-deps && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && node dist/index.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false            # paste Supabase pooled (:6543)
+        sync: false            # careme_app @ session-mode pooler (:5432)
       - key: DIRECT_URL
-        sync: false            # paste Supabase direct (:5432)
+        sync: false            # careme_app @ session-mode pooler (:5432)
+      - key: SUPERUSER_URL
+        sync: false            # postgres superuser — for prisma migrate deploy
       - key: JWT_SECRET
         sync: false
       - key: ENCRYPTION_KEY
@@ -42,6 +53,8 @@ services:
         value: 15m
       - key: REFRESH_TOKEN_EXPIRES_DAYS
         value: "7"
+      - key: TOTP_ISSUER
+        value: Careme
       - key: LOGIN_RATE_LIMIT
         value: "5"
       - key: LOGIN_RATE_WINDOW
@@ -58,15 +71,15 @@ services:
     plan: starter
     branch: main
     rootDir: .
-    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    buildCommand: npm install --legacy-peer-deps && npx prisma generate && npm run build
     startCommand: npm run worker   # tsx src/jobs/worker.ts
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        sync: false            # careme_bypass role (BYPASSRLS) for workers
       - key: DIRECT_URL
-        sync: false
+        sync: false            # careme_bypass role
       - key: REDIS_URL
         fromService:
           name: careme-redis
@@ -80,15 +93,15 @@ services:
     plan: starter
     branch: main
     rootDir: .
-    buildCommand: npm install prisma@5.22.0 @prisma/client@5.22.0 --legacy-peer-deps --no-save && npm install --legacy-peer-deps && npm run build
+    buildCommand: npm install --legacy-peer-deps && npx prisma generate && npm run build
     startCommand: npm run worker:sweep   # tsx src/notifications/reminder-processor.ts
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        sync: false
+        sync: false            # careme_bypass role (BYPASSRLS) for workers
       - key: DIRECT_URL
-        sync: false
+        sync: false            # careme_bypass role
       - key: REDIS_URL
         fromService:
           name: careme-redis

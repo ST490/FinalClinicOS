@@ -1,10 +1,11 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { CreateAuditInput, AuditResponse, SearchAuditInput } from './types/audit.types.js';
 
 export class AuditService {
-  async log(input: CreateAuditInput): Promise<AuditResponse> {
-    const entry = await prisma.auditLog.create({
+  async log(input: CreateAuditInput, tx: Tx = defaultTx): Promise<AuditResponse> {
+    const entry = await tx.auditLog.create({
       data: {
         orgId: input.orgId,
         clinicId: input.clinicId,
@@ -22,7 +23,7 @@ export class AuditService {
     return this.formatEntry(entry);
   }
 
-  async search(input: SearchAuditInput): Promise<{ data: AuditResponse[]; pagination: any }> {
+  async search(input: SearchAuditInput, tx: Tx = defaultTx): Promise<{ data: AuditResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 50, 200);
     const skip = (page - 1) * limit;
@@ -39,14 +40,14 @@ export class AuditService {
     };
 
     const [entries, total] = await Promise.all([
-      prisma.auditLog.findMany({
+      tx.auditLog.findMany({
         where,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: { user: { select: { name: true } } },
       }),
-      prisma.auditLog.count({ where }),
+      tx.auditLog.count({ where }),
     ]);
 
     return {
@@ -55,8 +56,8 @@ export class AuditService {
     };
   }
 
-  async getByEntity(entityType: string, entityId: string, scope: { orgId: string; clinicId?: string }): Promise<AuditResponse[]> {
-    const entries = await prisma.auditLog.findMany({
+  async getByEntity(entityType: string, entityId: string, scope: { orgId: string; clinicId?: string }, tx: Tx = defaultTx): Promise<AuditResponse[]> {
+    const entries = await tx.auditLog.findMany({
       where: { entityType, entityId, orgId: scope.orgId, ...(scope.clinicId ? { clinicId: scope.clinicId } : {}) },
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { name: true } } },

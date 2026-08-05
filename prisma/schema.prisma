@@ -795,6 +795,10 @@ model PrescriptionItem {
   id             String @id @default(uuid())
   prescriptionId String @map("prescription_id")
 
+  // Tenant isolation keys (backfilled from parent prescription)
+  orgId    String @map("org_id")
+  clinicId String @map("clinic_id")
+
   medicineId String? @map("medicine_id")
   customName String? @map("custom_name")
 
@@ -819,6 +823,7 @@ model PrescriptionItem {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([prescriptionId])
+  @@index([orgId, clinicId])
   @@map("prescription_items")
 }
 

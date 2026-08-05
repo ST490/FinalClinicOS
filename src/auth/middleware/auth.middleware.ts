@@ -158,14 +158,29 @@ export async function loadUserRoles(req: Request, res: Response, next: NextFunct
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: {
-        clinicRoles: {
-          where: { status: 'ACTIVE' },
-          include: { clinic: { select: { id: true, name: true } } },
+    const userId = req.user.id;
+    // Wrap in a transaction with GUCs so we can read user_clinic_roles through RLS.
+    // At this point we only know user_id and org_id (from JWT), not the clinic list
+    // (that's what we're loading). The user_clinic_roles RLS policy allows rows
+    // matching user_id = current_setting('app.current_user_id').
+    const user = await prisma.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SELECT set_config('app.current_user_id', $1, true),
+                set_config('app.current_org_id', $2, true),
+                set_config('app.is_org_owner', $3, true)`,
+        userId,
+        req.user?.orgId || '',
+        req.user?.isOrgOwner ? 'true' : 'false',
+      );
+      return tx.user.findUnique({
+        where: { id: userId },
+        include: {
+          clinicRoles: {
+            where: { status: 'ACTIVE' },
+            include: { clinic: { select: { id: true, name: true } } },
+          },
         },
-      },
+      });
     });
 
     if (!user) {

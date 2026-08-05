@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { patientService } from './patient.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
-async function verifyPatientAccess(req: Request, res: Response): Promise<any> {
-  const patient = await patientService.findById(req.params.patientId as string);
+async function verifyPatientAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const patient = await patientService.findById(req.params.patientId as string, tx);
   if (!patient) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Patient not found' } });
     return null;
@@ -132,7 +133,7 @@ router.post(
   loadUserRoles,
   checkPermission('patient:create'),
   requireClinicAccess,
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
       const data = createPatientSchema.parse(req.body);
       const clinicId = data.clinicId as string || req.body.clinicId;
@@ -141,13 +142,13 @@ router.post(
         ...data,
         clinicId,
         createdById: req.user!.id,
-      });
+      }, tx);
 
       res.status(201).json(patient);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // GET /patients — List/search patients
@@ -160,7 +161,7 @@ router.get(
   authenticate,
   loadUserRoles,
   checkPermission('patient:read'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
       const params = searchSchema.parse(req.query);
       const clinicIdFromQuery = req.query.clinicId as string | undefined;
@@ -186,13 +187,13 @@ router.get(
         return;
       }
 
-      const result = await patientService.search({ ...params, ...scope });
+      const result = await patientService.search({ ...params, ...scope }, tx);
 
       res.json(result);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // GET /patients/:patientId — Get single patient
@@ -201,15 +202,15 @@ router.get(
   authenticate,
   loadUserRoles,
   checkPermission('patient:read'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
       res.json(patient);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // PATCH /patients/:patientId — Update patient
@@ -218,17 +219,17 @@ router.patch(
   authenticate,
   loadUserRoles,
   checkPermission('patient:update'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
       const data = updatePatientSchema.parse(req.body);
-      const updated = await patientService.update(req.params.patientId as string, data, req.user!.id);
+      const updated = await patientService.update(req.params.patientId as string, data, req.user!.id, tx);
       res.json(updated);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // DELETE /patients/:patientId — Soft delete patient
@@ -237,16 +238,16 @@ router.delete(
   authenticate,
   loadUserRoles,
   checkPermission('patient:delete'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
-      await patientService.delete(req.params.patientId as string);
+      await patientService.delete(req.params.patientId as string, tx);
       res.json({ success: true, message: 'Patient deleted successfully' });
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // POST /patients/:patientId/tags — Add tag
@@ -255,21 +256,21 @@ router.post(
   authenticate,
   loadUserRoles,
   checkPermission('patient:update'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
       const { tag } = req.body;
       if (!tag || typeof tag !== 'string') {
         res.status(400).json({ error: { code: 'INVALID_INPUT', message: 'Tag is required' } });
         return;
       }
-      const updated = await patientService.addTag(req.params.patientId as string, tag);
+      const updated = await patientService.addTag(req.params.patientId as string, tag, tx);
       res.json(updated);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // DELETE /patients/:patientId/tags/:tag — Remove tag
@@ -278,19 +279,20 @@ router.delete(
   authenticate,
   loadUserRoles,
   checkPermission('patient:update'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
       const updated = await patientService.removeTag(
         req.params.patientId as string,
-        decodeURIComponent(req.params.tag as string)
+        decodeURIComponent(req.params.tag as string),
+        tx
       );
       res.json(updated);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 // GET /patients/:patientId/stats — Patient statistics
@@ -299,16 +301,16 @@ router.get(
   authenticate,
   loadUserRoles,
   checkPermission('patient:read'),
-  async (req: Request, res: Response, next: NextFunction) => {
+  withTenantHandler(async (req: Request, res: Response, next: NextFunction, tx) => {
     try {
-      const patient = await verifyPatientAccess(req, res);
+      const patient = await verifyPatientAccess(req, res, tx);
       if (!patient) return;
-      const stats = await patientService.getPatientStats(req.params.patientId as string);
+      const stats = await patientService.getPatientStats(req.params.patientId as string, tx);
       res.json(stats);
     } catch (error) {
       next(error);
     }
-  }
+  })
 );
 
 export default router;

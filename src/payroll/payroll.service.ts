@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import {
   GeneratePayrollInput, ListPayrollInput, PayrollResponse,
 } from './payroll.types.js';
@@ -64,15 +65,15 @@ function hoursBetween(checkIn?: string | Date | null, checkOut?: string | Date |
 
 export class PayrollService {
   // Generate (or refresh) payslips for all SUPPORT staff in a clinic for a month.
-  async generate(input: GeneratePayrollInput): Promise<PayrollResponse[]> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async generate(input: GeneratePayrollInput, tx: Tx = defaultTx): Promise<PayrollResponse[]> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
     const { start, end } = periodRange(input.period);
     const workingDays = daysInMonth(input.period);
 
     // Scheduled daily hours per user (from active weekly shifts), default 8.
-    const schedules = await prisma.staffSchedule.findMany({
+    const schedules = await tx.staffSchedule.findMany({
       where: { clinicId: input.clinicId, isActive: true },
       select: { userId: true, startTime: true, endTime: true },
     });
@@ -82,8 +83,8 @@ export class PayrollService {
       if (!scheduledHours.has(s.userId)) scheduledHours.set(s.userId, h || 8);
     }
 
-    // All staff with a base rate set — across every role (not just SUPPORT).
-    const roles = await prisma.userClinicRole.findMany({
+    // All staff with a base rate set â€” across every role (not just SUPPORT).
+    const roles = await tx.userClinicRole.findMany({
       where: { clinicId: input.clinicId, salary: { not: null } },
       include: {
         user: {
@@ -122,7 +123,7 @@ export class PayrollService {
       const daysWorked = daysPresent + 0.5 * daysHalfDay;
       const daysAbsent = Math.max(0, workingDays - days.size);
 
-      // Hourly-equivalent rate for overtime (1.5×).
+      // Hourly-equivalent rate for overtime (1.5Ã—).
       const hourlyEquiv =
         wageType === 'MONTHLY' ? baseRate / workingDays / 8
         : wageType === 'DAILY' ? baseRate / 8
@@ -143,7 +144,7 @@ export class PayrollService {
       const arrears = Number(adj.arrears ?? 0);
       const net = Math.round((basic + overtimePay + arrears + bonus - deduction - advance) * 100) / 100;
 
-      const record = await prisma.payroll.upsert({
+      const record = await tx.payroll.upsert({
         where: { userId_period: { userId: role.userId, period: input.period } },
         create: {
           clinicId: input.clinicId,
@@ -167,8 +168,8 @@ export class PayrollService {
     return results;
   }
 
-  async approve(id: string): Promise<PayrollResponse> {
-    const record = await prisma.payroll.update({
+  async approve(id: string, tx: Tx = defaultTx): Promise<PayrollResponse> {
+    const record = await tx.payroll.update({
       where: { id },
       data: { status: 'APPROVED' },
       include: payrollInclude,
@@ -176,7 +177,7 @@ export class PayrollService {
     return toResponse(record);
   }
 
-  async list(input: ListPayrollInput): Promise<{ data: PayrollResponse[]; pagination: any }> {
+  async list(input: ListPayrollInput, tx: Tx = defaultTx): Promise<{ data: PayrollResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 50, 100);
     const skip = (page - 1) * limit;
@@ -189,14 +190,14 @@ export class PayrollService {
     };
 
     const [records, total] = await Promise.all([
-      prisma.payroll.findMany({
+      tx.payroll.findMany({
         where,
         skip,
         take: limit,
         orderBy: [{ period: 'desc' }, { user: { name: 'asc' } }],
         include: payrollInclude,
       }),
-      prisma.payroll.count({ where }),
+      tx.payroll.count({ where }),
     ]);
 
     const data = records
@@ -206,8 +207,8 @@ export class PayrollService {
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async markPaid(id: string): Promise<PayrollResponse> {
-    const record = await prisma.payroll.update({
+  async markPaid(id: string, tx: Tx = defaultTx): Promise<PayrollResponse> {
+    const record = await tx.payroll.update({
       where: { id },
       data: { status: 'PAID', paidAt: new Date() },
       include: payrollInclude,

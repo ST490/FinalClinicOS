@@ -32,9 +32,7 @@ every step; only reminders + Rx→inventory flow need real run-time validation.
 
 ## Load-bearing gaps (must clear before declaring v0.9 done)
 
-- Migrations exist (`init` + `appointment_category`) but 2 more are disabled in
-  `prisma_pending_backup/` (RLS + unique slot index) pending re-dating — see
-  `to_deploy.md`.
+- Migrations exist (`init` + `appointment_category` + `prescription_items_tenant_columns` + `rls_tenant_isolation`) but RLS roles must be created manually via `scripts/setup-roles.sql` — see `to_deploy.md`.
 - No background queue (BullMQ/worker) — reminder dispatch is synchronous
 - Test directory missing — zero coverage, no tenant-isolation tests yet
 
@@ -101,10 +99,10 @@ are available at boot.)
 
 ## Pending (backend only; per blueprint sections)
 
-1. Migrations + seed script (§735)
+1. Seed script (§735)
 2. Queue + reminder worker (§6, §13)
 3. Twilio webhook signature verify + retry/backoff (§19)
-4. RLS policies on tenant tables (§14)
+4. RLS policies on tenant tables (§14) — DONE: migrations 00010 + 00011, roles via scripts/setup-roles.sql
 5. Object storage (S3/R2) service (§21)
 6. Email provider (password reset + account notifications)
 7. CAPTCHA on public booking (§14)

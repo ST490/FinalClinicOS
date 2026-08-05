@@ -1,8 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
 import { payrollService } from './payroll.service.js';
-import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
+import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -36,32 +37,32 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/payroll/generate', authenticate, loadUserRoles, checkPerm('payroll:manage'), async (req, res, next) => {
+router.post('/payroll/generate', authenticate, loadUserRoles, checkPerm('payroll:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const payslips = await payrollService.generate(generateSchema.parse(req.body));
+    const payslips = await payrollService.generate(generateSchema.parse(req.body), tx);
     res.status(201).json(payslips);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/payroll', authenticate, loadUserRoles, checkPerm('payroll:read'), async (req, res, next) => {
+router.get('/payroll', authenticate, loadUserRoles, checkPerm('payroll:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await payrollService.list(listSchema.parse(req.query));
+    const result = await payrollService.list(listSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/payroll/:id/pay', authenticate, loadUserRoles, checkPerm('payroll:manage'), async (req, res, next) => {
+router.post('/payroll/:id/pay', authenticate, loadUserRoles, checkPerm('payroll:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const payslip = await payrollService.markPaid(req.params.id as string);
+    const payslip = await payrollService.markPaid(req.params.id as string, tx);
     res.json(payslip);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/payroll/:id/approve', authenticate, loadUserRoles, checkPerm('payroll:manage'), async (req, res, next) => {
+router.post('/payroll/:id/approve', authenticate, loadUserRoles, checkPerm('payroll:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const payslip = await payrollService.approve(req.params.id as string);
+    const payslip = await payrollService.approve(req.params.id as string, tx);
     res.json(payslip);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

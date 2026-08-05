@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { auditService } from '../audit/audit.service.js';
 import {
   CreateCredentialInput,
@@ -25,8 +26,8 @@ function toCredential(row: any): StaffCredential {
 }
 
 export class CredentialsService {
-  async create(input: CreateCredentialInput, actor: { userId: string; ip?: string; ua?: string }): Promise<StaffCredential> {
-    const row = await prisma.staffCredential.create({
+  async create(input: CreateCredentialInput, actor: { userId: string; ip?: string; ua?: string }, tx: Tx = defaultTx): Promise<StaffCredential> {
+    const row = await tx.staffCredential.create({
       data: {
         clinicId: input.clinicId,
         orgId: input.orgId,
@@ -48,11 +49,11 @@ export class CredentialsService {
       after: { type: input.type },
       ipAddress: actor.ip,
       userAgent: actor.ua,
-    });
+    }, tx);
     return toCredential(row);
   }
 
-  async list(input: ListCredentialsInput): Promise<StaffCredential[]> {
+  async list(input: ListCredentialsInput, tx: Tx = defaultTx): Promise<StaffCredential[]> {
     const where: Prisma.StaffCredentialWhereInput = {};
     if (input.orgId) where.orgId = input.orgId;
     if (input.clinicId) where.clinicId = Array.isArray(input.clinicId) ? { in: input.clinicId } : input.clinicId;
@@ -62,7 +63,7 @@ export class CredentialsService {
       const horizon = new Date(Date.now() + input.expiringWithinDays * 24 * 3600 * 1000);
       where.expiresAt = { lte: horizon, gte: new Date() };
     }
-    const rows = await prisma.staffCredential.findMany({ where, orderBy: { expiresAt: 'asc' } });
+    const rows = await tx.staffCredential.findMany({ where, orderBy: { expiresAt: 'asc' } });
     return rows.map(toCredential);
   }
 
@@ -70,8 +71,9 @@ export class CredentialsService {
     id: string,
     input: UpdateCredentialInput,
     actor: { userId: string; clinicId: string; orgId: string; ip?: string; ua?: string },
+    tx: Tx = defaultTx,
   ): Promise<StaffCredential> {
-    const row = await prisma.staffCredential.update({
+    const row = await tx.staffCredential.update({
       where: { id },
       data: {
         ...(input.type ? { type: input.type } : {}),
@@ -91,12 +93,12 @@ export class CredentialsService {
       after: input,
       ipAddress: actor.ip,
       userAgent: actor.ua,
-    });
+    }, tx);
     return toCredential(row);
   }
 
-  async delete(id: string, actor: { userId: string; clinicId: string; orgId: string; ip?: string; ua?: string }): Promise<void> {
-    await prisma.staffCredential.delete({ where: { id } });
+  async delete(id: string, actor: { userId: string; clinicId: string; orgId: string; ip?: string; ua?: string }, tx: Tx = defaultTx): Promise<void> {
+    await tx.staffCredential.delete({ where: { id } });
     await auditService.log({
       orgId: actor.orgId,
       clinicId: actor.clinicId,
@@ -106,7 +108,7 @@ export class CredentialsService {
       entityId: id,
       ipAddress: actor.ip,
       userAgent: actor.ua,
-    });
+    }, tx);
   }
 }
 

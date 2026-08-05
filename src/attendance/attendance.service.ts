@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { ClockInInput, ClockOutInput, AttendanceResponse, SearchAttendanceInput, AttendanceSummary } from './types/attendance.types.js';
 
 export class AttendanceService {
@@ -14,20 +15,20 @@ export class AttendanceService {
     return role?.department ?? null;
   }
 
-  async clockIn(input: ClockInInput): Promise<AttendanceResponse> {
+  async clockIn(input: ClockInInput, tx: Tx = defaultTx): Promise<AttendanceResponse> {
     // Check if already clocked in today
     const date = new Date(input.date || new Date().toISOString().split('T')[0]);
-    const existing = await prisma.staffAttendance.findFirst({
+    const existing = await tx.staffAttendance.findFirst({
       where: { userId: input.userId, date },
     });
 
     // Department is copied from the worker's clinic role at clock-in time.
-    const role = await prisma.userClinicRole.findFirst({
+    const role = await tx.userClinicRole.findFirst({
       where: { userId: input.userId, clinicId: input.clinicId },
     });
 
     if (existing) {
-      const updated = await prisma.staffAttendance.update({
+      const updated = await tx.staffAttendance.update({
         where: { id: existing.id },
         data: {
           checkIn: input.checkIn ? new Date(`${input.date}T${input.checkIn}:00`) : new Date(),
@@ -40,10 +41,10 @@ export class AttendanceService {
       return this.formatAttendance(updated);
     }
 
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    const record = await prisma.staffAttendance.create({
+    const record = await tx.staffAttendance.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -60,8 +61,8 @@ export class AttendanceService {
     return this.formatAttendance(record);
   }
 
-  async clockOut(attendanceId: string, input: ClockOutInput): Promise<AttendanceResponse> {
-    const record = await prisma.staffAttendance.update({
+  async clockOut(attendanceId: string, input: ClockOutInput, tx: Tx = defaultTx): Promise<AttendanceResponse> {
+    const record = await tx.staffAttendance.update({
       where: { id: attendanceId },
       data: {
         checkOut: input.checkOut ? new Date(input.checkOut) : new Date(),
@@ -71,7 +72,7 @@ export class AttendanceService {
     return this.formatAttendance(record);
   }
 
-  async search(input: SearchAttendanceInput): Promise<{ data: AttendanceResponse[]; pagination: any }> {
+  async search(input: SearchAttendanceInput, tx: Tx = defaultTx): Promise<{ data: AttendanceResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -86,14 +87,14 @@ export class AttendanceService {
     };
 
     const [records, total] = await Promise.all([
-      prisma.staffAttendance.findMany({
+      tx.staffAttendance.findMany({
         where,
         skip,
         take: limit,
         orderBy: { date: 'desc' },
         include: this.attendanceInclude,
       }),
-      prisma.staffAttendance.count({ where }),
+      tx.staffAttendance.count({ where }),
     ]);
 
     return {
@@ -102,9 +103,9 @@ export class AttendanceService {
     };
   }
 
-  async getTodayAttendance(clinicId: string): Promise<AttendanceResponse[]> {
+  async getTodayAttendance(clinicId: string, tx: Tx = defaultTx): Promise<AttendanceResponse[]> {
     const today = new Date();
-    const records = await prisma.staffAttendance.findMany({
+    const records = await tx.staffAttendance.findMany({
       where: { clinicId, date: today },
       include: this.attendanceInclude,
       orderBy: { checkIn: 'asc' },
@@ -113,8 +114,8 @@ export class AttendanceService {
   }
 
   // Aggregate attendance for a date range + per-day trend (for HR dashboard).
-  async getSummary(clinicId: string, from: Date, to: Date): Promise<AttendanceSummary> {
-    const records = await prisma.staffAttendance.findMany({
+  async getSummary(clinicId: string, from: Date, to: Date, tx: Tx = defaultTx): Promise<AttendanceSummary> {
+    const records = await tx.staffAttendance.findMany({
       where: { clinicId, date: { gte: from, lte: to } },
       select: { date: true, status: true },
     });

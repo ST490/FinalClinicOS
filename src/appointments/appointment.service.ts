@@ -1,5 +1,6 @@
 import { AppointmentType, AppointmentCategory, Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import {
   CreateAppointmentInput,
   UpdateAppointmentInput,
@@ -14,16 +15,16 @@ import { reminderService } from '../reminders/reminder.service.js';
 import { auditService } from '../audit/audit.service.js';
 
 export class AppointmentService {
-  async create(input: CreateAppointmentInput): Promise<AppointmentResponse> {
+  async create(input: CreateAppointmentInput, tx: Tx = defaultTx): Promise<AppointmentResponse> {
     // Lookup clinic for orgId
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    // ponytail: tenant scoping — referenced patient must belong to this org,
+    // ponytail: tenant scoping â€” referenced patient must belong to this org,
     // referenced doctor must be active at this clinic.
     let patientConsent: { phone: string | null; whatsappConsent: boolean; smsConsent: boolean } | null = null;
     if (input.patientId) {
-      const patient = await prisma.patient.findUnique({
+      const patient = await tx.patient.findUnique({
         where: { id: input.patientId },
         select: { orgId: true, phone: true, whatsappConsent: true, smsConsent: true },
       });
@@ -31,7 +32,7 @@ export class AppointmentService {
       patientConsent = { phone: patient.phone, whatsappConsent: patient.whatsappConsent, smsConsent: patient.smsConsent };
     }
     if (input.doctorId) {
-      const role = await prisma.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
+      const role = await tx.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
       if (!role) throw new ForbiddenError('Doctor is not active at this clinic');
     }
 
@@ -40,7 +41,7 @@ export class AppointmentService {
 
     // Double-booking prevention: check if doctor has active appointment at this time
     // Uses raw SQL partial index (see migration 00003) for DB-level enforcement
-    const conflicting = await prisma.appointment.findFirst({
+    const conflicting = await tx.appointment.findFirst({
       where: {
         doctorId: input.doctorId,
         status: { not: 'CANCELLED' },
@@ -65,7 +66,7 @@ export class AppointmentService {
         ? input.isNewPatient
         : category === AppointmentCategory.FIRST_TIME;
 
-    const appointment = await prisma.appointment.create({
+    const appointment = await tx.appointment.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -86,7 +87,7 @@ export class AppointmentService {
       },
     });
 
-    // ponytail: auto-bridge — schedule an appointment reminder on booking. Best-effort:
+    // ponytail: auto-bridge â€” schedule an appointment reminder on booking. Best-effort:
     // never fail the booking if reminder creation fails. Channel is chosen by consent
     // (WhatsApp preferred, SMS fallback); consent is re-verified at dispatch too.
     if (input.patientId && patientConsent?.phone) {
@@ -102,7 +103,7 @@ export class AppointmentService {
             channel,
             templateId: 'APPOINTMENT_REMINDER',
             scheduledAt: scheduledAt.toISOString(),
-          });
+          }, tx);
         } catch (e) {
           console.error('[AppointmentService] auto-reminder scheduling failed:', e);
         }
@@ -117,13 +118,13 @@ export class AppointmentService {
       entityType: 'APPOINTMENT',
       entityId: appointment.id,
       after: this.formatAppointment(appointment),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatAppointment(appointment);
   }
 
-  async update(id: string, input: UpdateAppointmentInput): Promise<AppointmentResponse> {
-    const existing = await prisma.appointment.findUnique({ where: { id } });
+  async update(id: string, input: UpdateAppointmentInput, tx: Tx = defaultTx): Promise<AppointmentResponse> {
+    const existing = await tx.appointment.findUnique({ where: { id } });
     if (!existing) throw new Error('Appointment not found');
 
     // If rescheduling, check for conflicts at new time
@@ -131,7 +132,7 @@ export class AppointmentService {
       const newStart = input.slotStart ? new Date(input.slotStart) : existing.slotStart;
       const newEnd = input.slotEnd ? new Date(input.slotEnd) : existing.slotEnd;
 
-      const conflicting = await prisma.appointment.findFirst({
+      const conflicting = await tx.appointment.findFirst({
         where: {
           id: { not: id },
           doctorId: existing.doctorId,
@@ -149,7 +150,7 @@ export class AppointmentService {
       }
     }
 
-    const appointment = await prisma.appointment.update({
+    const appointment = await tx.appointment.update({
       where: { id },
       data: {
         ...(input.slotStart && { slotStart: new Date(input.slotStart) }),
@@ -173,8 +174,8 @@ export class AppointmentService {
     return this.formatAppointment(appointment);
   }
 
-  async cancel(id: string, cancelledById: string): Promise<AppointmentResponse> {
-    const appointment = await prisma.appointment.update({
+  async cancel(id: string, cancelledById: string, tx: Tx = defaultTx): Promise<AppointmentResponse> {
+    const appointment = await tx.appointment.update({
       where: { id },
       data: {
         status: 'CANCELLED',
@@ -196,13 +197,13 @@ export class AppointmentService {
       entityType: 'APPOINTMENT',
       entityId: id,
       after: this.formatAppointment(appointment),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatAppointment(appointment);
   }
 
-  async findById(id: string): Promise<AppointmentResponse | null> {
-    const appointment = await prisma.appointment.findUnique({
+  async findById(id: string, tx: Tx = defaultTx): Promise<AppointmentResponse | null> {
+    const appointment = await tx.appointment.findUnique({
       where: { id },
       include: {
         clinic: { select: { id: true, name: true } },
@@ -215,7 +216,7 @@ export class AppointmentService {
     return appointment ? this.formatAppointment(appointment) : null;
   }
 
-  async search(input: AppointmentSearchInput): Promise<PaginatedAppointmentsResponse> {
+  async search(input: AppointmentSearchInput, tx: Tx = defaultTx): Promise<PaginatedAppointmentsResponse> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -232,7 +233,7 @@ export class AppointmentService {
     };
 
     const [appointments, total] = await Promise.all([
-      prisma.appointment.findMany({
+      tx.appointment.findMany({
         where,
         skip,
         take: limit,
@@ -243,7 +244,7 @@ export class AppointmentService {
           doctor: { select: { id: true, name: true } },
         },
       }),
-      prisma.appointment.count({ where }),
+      tx.appointment.count({ where }),
     ]);
 
     return {
@@ -252,12 +253,12 @@ export class AppointmentService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // AVAILABILITY & SLOT MANAGEMENT
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async getDoctorAvailability(input: DoctorAvailabilityInput): Promise<SlotAvailability[]> {
-    const doctorSchedule = await prisma.staffSchedule.findFirst({
+  async getDoctorAvailability(input: DoctorAvailabilityInput, tx: Tx = defaultTx): Promise<SlotAvailability[]> {
+    const doctorSchedule = await tx.staffSchedule.findFirst({
       where: {
         userId: input.doctorId,
         clinicId: input.clinicId,
@@ -278,7 +279,7 @@ export class AppointmentService {
     const dayEnd = new Date(`${dateStr}T${doctorSchedule.endTime}:00`);
 
     // Get existing appointments for this doctor on this date
-    const existingAppointments = await prisma.appointment.findMany({
+    const existingAppointments = await tx.appointment.findMany({
       where: {
         doctorId: input.doctorId,
         clinicId: input.clinicId,
@@ -310,8 +311,8 @@ export class AppointmentService {
     return slots;
   }
 
-  async getDoctorSchedule(clinicId: string, doctorId: string) {
-    return prisma.staffSchedule.findMany({
+  async getDoctorSchedule(clinicId: string, doctorId: string, tx: Tx = defaultTx) {
+    return tx.staffSchedule.findMany({
       where: { clinicId, userId: doctorId, isActive: true },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
     });

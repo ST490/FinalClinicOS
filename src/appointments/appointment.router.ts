@@ -3,13 +3,13 @@ import { z } from 'zod';
 import { appointmentService } from './appointment.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
-import { withTenant } from '../config/tenant-session.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 import express from 'express';
 
 const router = express.Router();
 
-async function verifyAppointmentAccess(req: Request, res: Response): Promise<any> {
-  const appt = await appointmentService.findById(req.params.id as string);
+async function verifyAppointmentAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const appt = await appointmentService.findById(req.params.id as string, tx);
   if (!appt) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Appointment not found' } });
     return null;
@@ -83,70 +83,70 @@ function checkPerm(permission: Permission) {
 }
 
 // POST /appointments
-router.post('/appointments', authenticate, loadUserRoles, checkPerm('appointment:create'), requireClinicAccess, async (req, res, next) => {
+router.post('/appointments', authenticate, loadUserRoles, checkPerm('appointment:create'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const data = createSchema.parse(req.body);
-    const appt = await appointmentService.create({ ...data, createdById: req.user!.id });
+    const appt = await appointmentService.create({ ...data, createdById: req.user!.id }, tx);
     res.status(201).json(appt);
   } catch (e) { next(e); }
-});
+}));
 
 // GET /appointments
-router.get('/appointments', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/appointments', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const data = searchSchema.parse(req.query);
-    const result = await appointmentService.search(data);
+    const result = await appointmentService.search(data, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
 // GET /appointments/:id
-router.get('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:read'), async (req, res, next) => {
+router.get('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const appt = await verifyAppointmentAccess(req, res);
+    const appt = await verifyAppointmentAccess(req, res, tx);
     if (!appt) return;
     res.json(appt);
   } catch (e) { next(e); }
-});
+}));
 
 // PATCH /appointments/:id
-router.patch('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:update'), async (req, res, next) => {
+router.patch('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:update'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const appt = await verifyAppointmentAccess(req, res);
+    const appt = await verifyAppointmentAccess(req, res, tx);
     if (!appt) return;
     const data = updateSchema.parse(req.body);
-    const updated = await appointmentService.update(req.params.id as string, data);
+    const updated = await appointmentService.update(req.params.id as string, data, tx);
     res.json(updated);
   } catch (e) { next(e); }
-});
+}));
 
 // DELETE /appointments/:id (cancel)
-router.delete('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:cancel'), async (req, res, next) => {
+router.delete('/appointments/:id', authenticate, loadUserRoles, checkPerm('appointment:cancel'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const appt = await verifyAppointmentAccess(req, res);
+    const appt = await verifyAppointmentAccess(req, res, tx);
     if (!appt) return;
-    const cancelled = await appointmentService.cancel(req.params.id as string, req.user!.id);
+    const cancelled = await appointmentService.cancel(req.params.id as string, req.user!.id, tx);
     res.json(cancelled);
   } catch (e) { next(e); }
-});
+}));
 
 // GET /appointments/availability/:clinicId/:doctorId?date=YYYY-MM-DD
-router.get('/appointments/availability/:clinicId/:doctorId', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/appointments/availability/:clinicId/:doctorId', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const { clinicId, doctorId } = req.params as { clinicId: string; doctorId: string };
     const date = req.query.date as string;
     if (!date) { res.status(400).json({ error: { code: 'DATE_REQUIRED' } }); return; }
-    const slots = await withTenant(req, () => appointmentService.getDoctorAvailability({ clinicId, doctorId, date }));
+    const slots = await appointmentService.getDoctorAvailability({ clinicId, doctorId, date }, tx);
     res.json(slots);
   } catch (e) { next(e); }
-});
+}));
 
 // GET /appointments/schedule/:clinicId/:doctorId
-router.get('/appointments/schedule/:clinicId/:doctorId', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/appointments/schedule/:clinicId/:doctorId', authenticate, loadUserRoles, checkPerm('appointment:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const schedule = await appointmentService.getDoctorSchedule(req.params.clinicId as string, req.params.doctorId as string);
+    const schedule = await appointmentService.getDoctorSchedule(req.params.clinicId as string, req.params.doctorId as string, tx);
     res.json(schedule);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

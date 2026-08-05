@@ -1,5 +1,6 @@
 import { StockMovementType, Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { auditService } from '../audit/audit.service.js';
 import {
   CreateInventoryItemInput,
@@ -14,15 +15,15 @@ import {
 } from './types/inventory.types.js';
 
 export class InventoryService {
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // CRUD
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async create(input: CreateInventoryItemInput): Promise<InventoryItemResponse> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async create(input: CreateInventoryItemInput, tx: Tx = defaultTx): Promise<InventoryItemResponse> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    // Lot/batch-tracked items are expiry-sensitive — they MUST carry a batch + expiry.
+    // Lot/batch-tracked items are expiry-sensitive â€” they MUST carry a batch + expiry.
     if (input.trackingType === 'LOT_BATCH' && (!input.batchNo || !input.expiryDate)) {
       throw new Error('Lot/batch-tracked items require batchNo and expiryDate');
     }
@@ -33,69 +34,67 @@ export class InventoryService {
       throw new Error('Inventory item requires medicineId or customName');
     }
 
-    return await prisma.$transaction(async (tx) => {
-      const item = await tx.inventoryItem.create({
-        data: {
-          clinicId: input.clinicId,
-          orgId: clinic.orgId,
-          medicineId: input.medicineId,
-          customName: input.customName,
-          customBrand: input.customBrand,
-          batchNo: input.batchNo,
-          expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-          quantity: input.quantity,
-          reorderThreshold: input.reorderThreshold || 10,
-          unitPrice: input.unitPrice,
-          mrp: input.mrp,
-          sellingPrice: input.sellingPrice,
-          ingredients: input.ingredients,
-          dosageForm: input.dosageForm,
-          strength: input.strength,
-          trackingType: input.trackingType ?? 'BULK',
-          regulatoryClass: input.regulatoryClass ?? 'STANDARD',
-          costType: input.costType ?? 'OVERHEAD',
-          stockingLevel: input.stockingLevel ?? 'CENTRAL',
-          clinicalCategory: input.clinicalCategory ?? 'PHARMA',
-          serialNo: input.serialNo,
-          consignmentOwner: input.consignmentOwner,
-          createdById: input.createdById,
-        },
-        include: {
-          medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
-        },
-      });
-
-      // Create initial stock movement (RESTOCK)
-      await tx.stockMovement.create({
-        data: {
-          clinicId: input.clinicId,
-          orgId: clinic.orgId,
-          inventoryItemId: item.id,
-          type: StockMovementType.RESTOCK,
-          quantityDelta: input.quantity,
-          performedById: input.createdById,
-          newBatchNo: input.batchNo,
-          newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-          notes: 'Initial stock',
-        },
-      });
-
-      await auditService.log({
-        orgId: clinic.orgId,
+    const item = await tx.inventoryItem.create({
+      data: {
         clinicId: input.clinicId,
-        userId: input.createdById,
-        action: 'CREATE',
-        entityType: 'INVENTORY_ITEM',
-        entityId: item.id,
-        after: this.formatItem(item),
-      }).catch(() => {});
-
-      return this.formatItem(item);
+        orgId: clinic.orgId,
+        medicineId: input.medicineId,
+        customName: input.customName,
+        customBrand: input.customBrand,
+        batchNo: input.batchNo,
+        expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+        quantity: input.quantity,
+        reorderThreshold: input.reorderThreshold || 10,
+        unitPrice: input.unitPrice,
+        mrp: input.mrp,
+        sellingPrice: input.sellingPrice,
+        ingredients: input.ingredients,
+        dosageForm: input.dosageForm,
+        strength: input.strength,
+        trackingType: input.trackingType ?? 'BULK',
+        regulatoryClass: input.regulatoryClass ?? 'STANDARD',
+        costType: input.costType ?? 'OVERHEAD',
+        stockingLevel: input.stockingLevel ?? 'CENTRAL',
+        clinicalCategory: input.clinicalCategory ?? 'PHARMA',
+        serialNo: input.serialNo,
+        consignmentOwner: input.consignmentOwner,
+        createdById: input.createdById,
+      },
+      include: {
+        medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
+      },
     });
+
+    // Create initial stock movement (RESTOCK)
+    await tx.stockMovement.create({
+      data: {
+        clinicId: input.clinicId,
+        orgId: clinic.orgId,
+        inventoryItemId: item.id,
+        type: StockMovementType.RESTOCK,
+        quantityDelta: input.quantity,
+        performedById: input.createdById,
+        newBatchNo: input.batchNo,
+        newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+        notes: 'Initial stock',
+      },
+    });
+
+    await auditService.log({
+      orgId: clinic.orgId,
+      clinicId: input.clinicId,
+      userId: input.createdById,
+      action: 'CREATE',
+      entityType: 'INVENTORY_ITEM',
+      entityId: item.id,
+      after: this.formatItem(item),
+    }, tx).catch(() => {});
+
+    return this.formatItem(item);
   }
 
-  async update(id: string, input: UpdateInventoryItemInput): Promise<InventoryItemResponse> {
-    const item = await prisma.inventoryItem.update({
+  async update(id: string, input: UpdateInventoryItemInput, tx: Tx = defaultTx): Promise<InventoryItemResponse> {
+    const item = await tx.inventoryItem.update({
       where: { id },
       data: input,
       include: {
@@ -105,8 +104,8 @@ export class InventoryService {
     return this.formatItem(item);
   }
 
-  async findById(id: string): Promise<InventoryItemResponse | null> {
-    const item = await prisma.inventoryItem.findUnique({
+  async findById(id: string, tx: Tx = defaultTx): Promise<InventoryItemResponse | null> {
+    const item = await tx.inventoryItem.findUnique({
       where: { id },
       include: {
         medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
@@ -116,7 +115,7 @@ export class InventoryService {
     return item ? this.formatItem(item) : null;
   }
 
-  async search(input: InventorySearchInput & { viewer?: InventoryViewer }): Promise<{ data: InventoryItemResponse[]; pagination: any }> {
+  async search(input: InventorySearchInput & { viewer?: InventoryViewer }, tx: Tx = defaultTx): Promise<{ data: InventoryItemResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -156,7 +155,7 @@ export class InventoryService {
     };
 
     const [items, total] = await Promise.all([
-      prisma.inventoryItem.findMany({
+      tx.inventoryItem.findMany({
         where,
         skip,
         take: limit,
@@ -165,7 +164,7 @@ export class InventoryService {
           medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
         },
       }),
-      prisma.inventoryItem.count({ where }),
+      tx.inventoryItem.count({ where }),
     ]);
 
     return {
@@ -174,17 +173,17 @@ export class InventoryService {
     };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, tx: Tx = defaultTx): Promise<void> {
     // Soft delete
-    await prisma.inventoryItem.update({
+    await tx.inventoryItem.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // STOCK OPERATIONS — FEFO (First Expiry, First Out)
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // STOCK OPERATIONS â€” FEFO (First Expiry, First Out)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Deduct stock using FEFO: always consume from batches expiring soonest first.
@@ -196,11 +195,10 @@ export class InventoryService {
     performedById: string,
     referenceType?: string,
     referenceId?: string,
-    secondSignatoryId?: string
+    secondSignatoryId?: string,
+    tx: Tx = defaultTx,
   ): Promise<{ success: boolean; shortage: number; batches: { batchNo: string | null; quantityTaken: number; expiryDate: Date | null }[] }> {
-    return await prisma.$transaction(async (tx) => {
-      return this.deductStockTx(tx, inventoryItemId, quantityRequested, performedById, referenceType, referenceId, secondSignatoryId);
-    });
+    return this.deductStockTx(tx, inventoryItemId, quantityRequested, performedById, referenceType, referenceId, secondSignatoryId);
   }
 
   async deductStockTx(
@@ -227,7 +225,7 @@ export class InventoryService {
     }
 
     if (totalAvailable < quantityRequested) {
-      // Partial fulfillment allowed — deduct what we have
+      // Partial fulfillment allowed â€” deduct what we have
       const shortage = quantityRequested - totalAvailable;
       const batches: { batchNo: string | null; quantityTaken: number; expiryDate: Date | null }[] = [];
       let remaining = totalAvailable;
@@ -272,7 +270,7 @@ export class InventoryService {
       return { success: false, shortage, batches };
     }
 
-    // Full fulfillment — FEFO
+    // Full fulfillment â€” FEFO
     const batches: { batchNo: string | null; quantityTaken: number; expiryDate: Date | null }[] = [];
     let remaining = quantityRequested;
 
@@ -317,61 +315,59 @@ export class InventoryService {
   /**
    * Adjust stock (RESTOCK, WRITE_OFF, ADJUSTMENT, RETURN)
    */
-  async adjustStock(inventoryItemId: string, input: StockAdjustmentInput): Promise<StockMovementResponse> {
-    return await prisma.$transaction(async (tx) => {
-      const item = await tx.inventoryItem.findUnique({ where: { id: inventoryItemId } });
-      if (!item) throw new Error('Inventory item not found');
+  async adjustStock(inventoryItemId: string, input: StockAdjustmentInput, tx: Tx = defaultTx): Promise<StockMovementResponse> {
+    const item = await tx.inventoryItem.findUnique({ where: { id: inventoryItemId } });
+    if (!item) throw new Error('Inventory item not found');
 
-      // Controlled substances require a second signatory (dual sign-off).
-      if (item.regulatoryClass === 'CONTROLLED' && !input.secondSignatoryId) {
-        throw new Error('CONTROLLED items require a second signatory (dual sign-off)');
-      }
+    // Controlled substances require a second signatory (dual sign-off).
+    if (item.regulatoryClass === 'CONTROLLED' && !input.secondSignatoryId) {
+      throw new Error('CONTROLLED items require a second signatory (dual sign-off)');
+    }
 
-      const movement = await tx.stockMovement.create({
-        data: {
-          clinicId: item.clinicId,
-          orgId: item.orgId,
-          inventoryItemId,
-          type: input.type,
-          quantityDelta: input.quantityDelta,
-          referenceType: input.referenceType,
-          referenceId: input.referenceId,
-          newBatchNo: input.batchNo,
-          newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-          notes: input.notes,
-          performedById: input.performedById,
-          secondSignatoryId: input.secondSignatoryId ?? null,
-        },
-        include: {
-          performedBy: { select: { id: true, name: true } },
-        },
-      });
-
-      // Update InventoryItem quantity
-      await tx.inventoryItem.update({
-        where: { id: inventoryItemId },
-        data: { quantity: { increment: input.quantityDelta } },
-      });
-
-      await auditService.log({
-        orgId: item.orgId,
+    const movement = await tx.stockMovement.create({
+      data: {
         clinicId: item.clinicId,
-        userId: input.performedById,
-        action: 'STOCK_ADJUST',
-        entityType: 'INVENTORY_MOVEMENT',
-        entityId: movement.id,
-        after: this.formatMovement(movement),
-      }).catch(() => {});
-
-      return this.formatMovement(movement);
+        orgId: item.orgId,
+        inventoryItemId,
+        type: input.type,
+        quantityDelta: input.quantityDelta,
+        referenceType: input.referenceType,
+        referenceId: input.referenceId,
+        newBatchNo: input.batchNo,
+        newExpiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
+        notes: input.notes,
+        performedById: input.performedById,
+        secondSignatoryId: input.secondSignatoryId ?? null,
+      },
+      include: {
+        performedBy: { select: { id: true, name: true } },
+      },
     });
+
+    // Update InventoryItem quantity
+    await tx.inventoryItem.update({
+      where: { id: inventoryItemId },
+      data: { quantity: { increment: input.quantityDelta } },
+    });
+
+    await auditService.log({
+      orgId: item.orgId,
+      clinicId: item.clinicId,
+      userId: input.performedById,
+      action: 'STOCK_ADJUST',
+      entityType: 'INVENTORY_MOVEMENT',
+      entityId: movement.id,
+      after: this.formatMovement(movement),
+    }, tx).catch(() => {});
+
+    return this.formatMovement(movement);
   }
 
   /**
    * Get stock movements for an item
    */
-  async getStockHistory(inventoryItemId: string, limit = 50): Promise<StockMovementResponse[]> {
-    const movements = await prisma.stockMovement.findMany({
+  async getStockHistory(inventoryItemId: string, limit = 50, tx: Tx = defaultTx): Promise<StockMovementResponse[]> {
+    const movements = await tx.stockMovement.findMany({
       where: { inventoryItemId },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -382,18 +378,18 @@ export class InventoryService {
     return movements.map(m => this.formatMovement(m));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // ALERTS
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   /**
    * Get all low-stock items for a clinic
    */
-  async getLowStockAlerts(clinicId: string): Promise<LowStockAlert> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+  async getLowStockAlerts(clinicId: string, tx: Tx = defaultTx): Promise<LowStockAlert> {
+    const clinic = await tx.clinic.findUnique({ where: { id: clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    const items = await prisma.inventoryItem.findMany({
+    const items = await tx.inventoryItem.findMany({
       where: { clinicId, deletedAt: null },
     });
 
@@ -417,11 +413,11 @@ export class InventoryService {
   /**
    * Get all expiring-soon items (within threshold days)
    */
-  async getExpiringSoonAlerts(clinicId: string): Promise<InventoryItemResponse[]> {
+  async getExpiringSoonAlerts(clinicId: string, tx: Tx = defaultTx): Promise<InventoryItemResponse[]> {
     const threshold = new Date();
     threshold.setDate(threshold.getDate() + FEFO_THRESHOLD_DAYS);
 
-    const items = await prisma.inventoryItem.findMany({
+    const items = await tx.inventoryItem.findMany({
       where: {
         clinicId,
         deletedAt: null,
@@ -433,9 +429,9 @@ export class InventoryService {
     return items.map(i => this.formatItem(i));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // HELPERS
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private async getCurrentStockMapByItemTx(tx: any, inventoryItemId: string): Promise<Record<string, number>> {
     // Group by batch/date for FEFO
@@ -476,7 +472,7 @@ export class InventoryService {
       displayName: this.getDisplayName(item),
       isLowStock: item.quantity <= item.reorderThreshold,
       isExpiringSoon: item.expiryDate ? new Date(item.expiryDate) <= new Date(Date.now() + FEFO_THRESHOLD_DAYS * 24 * 60 * 60 * 1000) : false,
-      // Buy price minus sell price → profit margin (null when sell price unknown).
+      // Buy price minus sell price â†’ profit margin (null when sell price unknown).
       margin: unitPrice != null && sellingPrice != null ? Number((sellingPrice - unitPrice).toFixed(2)) : null,
     };
   }

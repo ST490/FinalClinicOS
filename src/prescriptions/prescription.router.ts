@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { prescriptionService } from './prescription.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
-async function verifyPrescriptionAccess(req: Request, res: Response): Promise<any> {
-  const prescription = await prescriptionService.findById(req.params.id as string);
+async function verifyPrescriptionAccess(req: Request, res: Response, tx: any): Promise<any> {
+  const prescription = await prescriptionService.findById(req.params.id as string, tx);
   if (!prescription) {
     res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Prescription not found' } });
     return null;
@@ -83,61 +84,61 @@ function checkPerm(permission: Permission) {
   };
 }
 
-router.post('/prescriptions', authenticate, loadUserRoles, checkPerm('prescription:create'), requireClinicAccess, async (req, res, next) => {
+router.post('/prescriptions', authenticate, loadUserRoles, checkPerm('prescription:create'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const prescription = await prescriptionService.create({ ...createSchema.parse(req.body), createdById: req.user!.id });
+    const prescription = await prescriptionService.create({ ...createSchema.parse(req.body), createdById: req.user!.id }, tx);
     res.status(201).json(prescription);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/prescriptions', authenticate, loadUserRoles, checkPerm('prescription:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/prescriptions', authenticate, loadUserRoles, checkPerm('prescription:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await prescriptionService.search(searchSchema.parse(req.query));
+    const result = await prescriptionService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/prescriptions/:id', authenticate, loadUserRoles, checkPerm('prescription:read'), async (req, res, next) => {
+router.get('/prescriptions/:id', authenticate, loadUserRoles, checkPerm('prescription:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const prescription = await verifyPrescriptionAccess(req, res);
+    const prescription = await verifyPrescriptionAccess(req, res, tx);
     if (!prescription) return;
     res.json(prescription);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/prescriptions/:id/cancel', authenticate, loadUserRoles, checkPerm('prescription:cancel'), async (req, res, next) => {
+router.post('/prescriptions/:id/cancel', authenticate, loadUserRoles, checkPerm('prescription:cancel'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const prescription = await verifyPrescriptionAccess(req, res);
+    const prescription = await verifyPrescriptionAccess(req, res, tx);
     if (!prescription) return;
-    const result = await prescriptionService.cancel(req.params.id as string, req.user!.id);
+    const result = await prescriptionService.cancel(req.params.id as string, req.user!.id, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.patch('/prescriptions/:id/status', authenticate, loadUserRoles, checkPerm('prescription:update'), async (req, res, next) => {
+router.patch('/prescriptions/:id/status', authenticate, loadUserRoles, checkPerm('prescription:update'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const prescription = await verifyPrescriptionAccess(req, res);
+    const prescription = await verifyPrescriptionAccess(req, res, tx);
     if (!prescription) return;
     const { status } = statusSchema.parse(req.body);
-    const result = await prescriptionService.updateStatus({ id: req.params.id as string, status, actorId: req.user!.id });
+    const result = await prescriptionService.updateStatus({ id: req.params.id as string, status, actorId: req.user!.id }, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/prescriptions/:id/dispense', authenticate, loadUserRoles, checkPerm('inventory:manage'), async (req, res, next) => {
+router.post('/prescriptions/:id/dispense', authenticate, loadUserRoles, checkPerm('inventory:manage'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const prescription = await verifyPrescriptionAccess(req, res);
+    const prescription = await verifyPrescriptionAccess(req, res, tx);
     if (!prescription) return;
-    const result = await prescriptionService.dispensePrescription(req.params.id as string, { ...dispenseSchema.parse(req.body), performedById: req.user!.id });
+    const result = await prescriptionService.dispensePrescription(req.params.id as string, { ...dispenseSchema.parse(req.body), performedById: req.user!.id }, tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
-router.delete('/prescriptions/items/:itemId', authenticate, loadUserRoles, checkPerm('prescription:update'), async (req, res, next) => {
+router.delete('/prescriptions/items/:itemId', authenticate, loadUserRoles, checkPerm('prescription:update'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    await prescriptionService.deleteItem(req.params.itemId as string, req.user!.id);
+    await prescriptionService.deleteItem(req.params.itemId as string, req.user!.id, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

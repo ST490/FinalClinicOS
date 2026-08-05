@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { ForbiddenError } from '../common/errors.js';
 import { auditService } from '../audit/audit.service.js';
 import {
@@ -14,28 +15,28 @@ import {
 } from './types/prescription.types.js';
 
 export class PrescriptionService {
-  async create(input: CreatePrescriptionInput): Promise<PrescriptionResponse> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async create(input: CreatePrescriptionInput, tx: Tx = defaultTx): Promise<PrescriptionResponse> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    // ponytail: tenant scoping — patient must belong to this org, doctor active at this clinic.
+    // ponytail: tenant scoping â€” patient must belong to this org, doctor active at this clinic.
     if (input.patientId) {
-      const patient = await prisma.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
+      const patient = await tx.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
       if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
     }
     if (input.doctorId) {
-      const role = await prisma.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
+      const role = await tx.userClinicRole.findFirst({ where: { userId: input.doctorId, clinicId: input.clinicId, status: 'ACTIVE' } });
       if (!role) throw new ForbiddenError('Doctor is not active at this clinic');
     }
 
-    // ponytail: every Rx line must identify the drug — catalogued or free-text.
+    // ponytail: every Rx line must identify the drug â€” catalogued or free-text.
     for (const item of input.items) {
       if (!item.medicineId && !item.customName) {
         throw new Error('Each prescription item requires medicineId or customName');
       }
     }
 
-    const prescription = await prisma.prescription.create({
+    const prescription = await tx.prescription.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -47,6 +48,8 @@ export class PrescriptionService {
         status: 'ACTIVE',
         items: {
           create: input.items.map(item => ({
+            orgId: clinic.orgId,
+            clinicId: input.clinicId,
             medicineId: item.medicineId,
             customName: item.customName,
             dosage: item.dosage,
@@ -76,13 +79,13 @@ export class PrescriptionService {
       entityType: 'PRESCRIPTION',
       entityId: prescription.id,
       after: this.formatPrescription(prescription),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatPrescription(prescription);
   }
 
-  async findById(id: string): Promise<PrescriptionResponse | null> {
-    const prescription = await prisma.prescription.findUnique({
+  async findById(id: string, tx: Tx = defaultTx): Promise<PrescriptionResponse | null> {
+    const prescription = await tx.prescription.findUnique({
       where: { id },
       include: {
         patient: { select: { id: true, name: true, phone: true } },
@@ -96,18 +99,18 @@ export class PrescriptionService {
   }
 
   // Delete a single Rx line. Dispensed lines are locked (stock already left inventory).
-  async deleteItem(prescriptionItemId: string, actorId?: string): Promise<void> {
-    const item = await prisma.prescriptionItem.findUnique({
+  async deleteItem(prescriptionItemId: string, actorId?: string, tx: Tx = defaultTx): Promise<void> {
+    const item = await tx.prescriptionItem.findUnique({
       where: { id: prescriptionItemId },
       select: { dispensed: true, prescriptionId: true },
     });
     if (!item) throw new Error('Prescription item not found');
     if (item.dispensed) throw new Error('Cannot delete a dispensed item');
-    const prescription = await prisma.prescription.findUnique({
+    const prescription = await tx.prescription.findUnique({
       where: { id: item.prescriptionId },
       select: { orgId: true, clinicId: true },
     });
-    await prisma.prescriptionItem.delete({ where: { id: prescriptionItemId } });
+    await tx.prescriptionItem.delete({ where: { id: prescriptionItemId } });
     if (prescription) {
       await auditService.log({
         orgId: prescription.orgId,
@@ -116,11 +119,11 @@ export class PrescriptionService {
         action: 'DELETE',
         entityType: 'PRESCRIPTION_ITEM',
         entityId: prescriptionItemId,
-      }).catch(() => {});
+      }, tx).catch(() => {});
     }
   }
 
-  async search(input: SearchPrescriptionsInput): Promise<{ data: PrescriptionResponse[]; pagination: any }> {
+  async search(input: SearchPrescriptionsInput, tx: Tx = defaultTx): Promise<{ data: PrescriptionResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -134,7 +137,7 @@ export class PrescriptionService {
     };
 
     const [prescriptions, total] = await Promise.all([
-      prisma.prescription.findMany({
+      tx.prescription.findMany({
         where,
         skip,
         take: limit,
@@ -147,7 +150,7 @@ export class PrescriptionService {
           },
         },
       }),
-      prisma.prescription.count({ where }),
+      tx.prescription.count({ where }),
     ]);
 
     return {
@@ -156,8 +159,8 @@ export class PrescriptionService {
     };
   }
 
-  async cancel(id: string, cancelledById: string): Promise<PrescriptionResponse> {
-    const prescription = await prisma.prescription.update({
+  async cancel(id: string, cancelledById: string, tx: Tx = defaultTx): Promise<PrescriptionResponse> {
+    const prescription = await tx.prescription.update({
       where: { id },
       data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledById },
       include: {
@@ -169,7 +172,7 @@ export class PrescriptionService {
     return this.formatPrescription(prescription);
   }
 
-  async updateStatus(input: UpdatePrescriptionStatusInput): Promise<PrescriptionResponse> {
+  async updateStatus(input: UpdatePrescriptionStatusInput, tx: Tx = defaultTx): Promise<PrescriptionResponse> {
     if (!PRESCRIPTION_STATUSES.includes(input.status)) {
       throw new Error(`Invalid prescription status: ${input.status}`);
     }
@@ -178,7 +181,7 @@ export class PrescriptionService {
       data.cancelledAt = new Date();
       data.cancelledById = input.actorId;
     }
-    const prescription = await prisma.prescription.update({
+    const prescription = await tx.prescription.update({
       where: { id: input.id },
       data,
       include: {
@@ -192,74 +195,72 @@ export class PrescriptionService {
     return this.formatPrescription(prescription);
   }
 
-  async dispensePrescription(id: string, input: DispensePrescriptionInput): Promise<PrescriptionResponse> {
+  async dispensePrescription(id: string, input: DispensePrescriptionInput, tx: Tx = defaultTx): Promise<PrescriptionResponse> {
     const { inventoryService } = await import('../inventory/inventory.service.js');
 
-    // Use transaction to atomically mark items as dispensed and deduct inventory
-    const prescription = await prisma.$transaction(async (tx) => {
-      // Find the prescription to get clinicId + current status
-      const rx = await tx.prescription.findUnique({
-        where: { id },
-        select: { clinicId: true, status: true },
+    // When called from withTenantHandler, tx already has GUCs set.
+    // Find the prescription to get clinicId + current status
+    const rx = await tx.prescription.findUnique({
+      where: { id },
+      select: { clinicId: true, orgId: true, status: true },
+    });
+    if (!rx) throw new Error('Prescription not found');
+
+    // Mark each item as dispensed
+    for (const item of input.items) {
+      // Fetch the prescriptionItem to get medicineId or customName
+      const rxItem = await tx.prescriptionItem.findUnique({
+        where: { id: item.prescriptionItemId },
+        select: { medicineId: true, customName: true },
       });
-      if (!rx) throw new Error('Prescription not found');
+      if (!rxItem) throw new Error(`Prescription item ${item.prescriptionItemId} not found`);
 
-      // Mark each item as dispensed
-      for (const item of input.items) {
-        // Fetch the prescriptionItem to get medicineId or customName
-        const rxItem = await tx.prescriptionItem.findUnique({
-          where: { id: item.prescriptionItemId },
-          select: { medicineId: true, customName: true },
-        });
-        if (!rxItem) throw new Error(`Prescription item ${item.prescriptionItemId} not found`);
+      // Find matching inventory item in the clinic
+      const inventoryItem = await tx.inventoryItem.findFirst({
+        where: {
+          clinicId: rx.clinicId,
+          deletedAt: null,
+          ...(rxItem.medicineId ? { medicineId: rxItem.medicineId } : { customName: rxItem.customName }),
+        },
+        select: { id: true },
+      });
 
-        // Find matching inventory item in the clinic
-        const inventoryItem = await tx.inventoryItem.findFirst({
-          where: {
-            clinicId: rx.clinicId,
-            deletedAt: null,
-            ...(rxItem.medicineId ? { medicineId: rxItem.medicineId } : { customName: rxItem.customName }),
-          },
-          select: { id: true },
-        });
-
-        // If a matching inventory item exists, deduct its stock!
-        if (inventoryItem) {
-          await inventoryService.deductStockTx(
-            tx,
-            inventoryItem.id,
-            item.quantity,
-            input.performedById,
-            'PRESCRIPTION',
-            id,
-            input.secondSignatoryId
-          );
-        }
-
-        await tx.prescriptionItem.update({
-          where: { id: item.prescriptionItemId },
-          data: {
-            dispensed: true,
-            dispensedQty: { increment: item.quantity },
-          },
-        });
+      // If a matching inventory item exists, deduct its stock!
+      if (inventoryItem) {
+        await inventoryService.deductStockTx(
+          tx,
+          inventoryItem.id,
+          item.quantity,
+          input.performedById,
+          'PRESCRIPTION',
+          id,
+          input.secondSignatoryId
+        );
       }
 
-      // Mark the prescription dispensed once items are handed out
-      if (String(rx.status).toUpperCase() === 'ACTIVE') {
-        await tx.prescription.update({ where: { id }, data: { status: 'DISPENSED' } });
-      }
-
-      return tx.prescription.findUnique({
-        where: { id },
-        include: {
-          patient: { select: { id: true, name: true, phone: true } },
-          doctor: { select: { id: true, name: true } },
-          items: {
-            include: { medicine: { select: { id: true, genericName: true, brandNames: true } } },
-          },
+      await tx.prescriptionItem.update({
+        where: { id: item.prescriptionItemId },
+        data: {
+          dispensed: true,
+          dispensedQty: { increment: item.quantity },
         },
       });
+    }
+
+    // Mark the prescription dispensed once items are handed out
+    if (String(rx.status).toUpperCase() === 'ACTIVE') {
+      await tx.prescription.update({ where: { id }, data: { status: 'DISPENSED' } });
+    }
+
+    const prescription = await tx.prescription.findUnique({
+      where: { id },
+      include: {
+        patient: { select: { id: true, name: true, phone: true } },
+        doctor: { select: { id: true, name: true } },
+        items: {
+          include: { medicine: { select: { id: true, genericName: true, brandNames: true } } },
+        },
+      },
     });
 
     await auditService.log({
@@ -270,7 +271,7 @@ export class PrescriptionService {
       entityType: 'PRESCRIPTION',
       entityId: id,
       after: this.formatPrescription(prescription!),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatPrescription(prescription!);
   }

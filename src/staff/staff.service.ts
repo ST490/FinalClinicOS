@@ -1,5 +1,6 @@
 import { Prisma, UserRoleType, UserStatus } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { ForbiddenError } from '../common/errors.js';
 import { auditService } from '../audit/audit.service.js';
 import {
@@ -16,11 +17,11 @@ import {
 import { generateToken, hashToken } from '../auth/utils/password.service.js';
 
 export class StaffService {
-  async invite(input: InviteStaffInput): Promise<InvitationResponse> {
+  async invite(input: InviteStaffInput, tx: Tx = defaultTx): Promise<InvitationResponse> {
     const token = generateToken(24);
     const tokenHash = hashToken(token);
 
-    await prisma.invite.create({
+    await tx.invite.create({
       data: {
         orgId: input.orgId,
         clinicId: input.clinicId,
@@ -38,16 +39,16 @@ export class StaffService {
     return { inviteId: tokenHash, token, message: 'Invitation sent successfully' };
   }
 
-  async acceptInvite(input: AcceptInviteInput): Promise<{ user: StaffResponse; clinicRole?: ClinicRoleResponse }> {
+  async acceptInvite(input: AcceptInviteInput, tx: Tx = defaultTx): Promise<{ user: StaffResponse; clinicRole?: ClinicRoleResponse }> {
     const tokenHash = hashToken(input.token);
-    const invite = await prisma.invite.findFirst({
+    const invite = await tx.invite.findFirst({
       where: { tokenHash, status: 'pending', expiresAt: { gt: new Date() } },
       include: { clinic: true },
     });
 
     if (!invite) throw new Error('Invalid or expired invitation');
 
-    const user = await prisma.user.create({
+    const user = await tx.user.create({
       data: {
         orgId: invite.orgId,
         name: input.name,
@@ -59,12 +60,12 @@ export class StaffService {
 
     if (input.password) {
       const { hashPassword } = await import('../auth/utils/password.service.js');
-      await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(input.password) } });
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(input.password) } });
     }
 
     let clinicRole: any;
     if (invite.clinicId) {
-      clinicRole = await prisma.userClinicRole.create({
+      clinicRole = await tx.userClinicRole.create({
         data: {
           userId: user.id,
           clinicId: invite.clinicId,
@@ -76,7 +77,7 @@ export class StaffService {
       });
     }
 
-    await prisma.invite.update({ where: { id: invite.id }, data: { status: 'accepted', acceptedById: user.id } });
+    await tx.invite.update({ where: { id: invite.id }, data: { status: 'accepted', acceptedById: user.id } });
 
     return {
       user: this.formatUser(user),
@@ -86,19 +87,19 @@ export class StaffService {
 
   // Direct-add support staff (SUPPORT) as ACTIVE with no invite/login.
   // RECEPTIONIST/HR still go through the invite flow.
-  async directAdd(input: DirectAddStaffInput): Promise<{ user: StaffResponse; clinicRole?: ClinicRoleResponse }> {
-    const user = await prisma.user.create({
+  async directAdd(input: DirectAddStaffInput, tx: Tx = defaultTx): Promise<{ user: StaffResponse; clinicRole?: ClinicRoleResponse }> {
+    const user = await tx.user.create({
       data: {
         orgId: input.orgId,
         name: input.name,
         email: input.email,
         phone: input.phone,
         status: 'ACTIVE',
-        // Intentionally no passwordHash — these workers are roster entries, not login accounts.
+        // Intentionally no passwordHash â€” these workers are roster entries, not login accounts.
       },
     });
 
-    const clinicRole = await prisma.userClinicRole.create({
+    const clinicRole = await tx.userClinicRole.create({
       data: {
         userId: user.id,
         clinicId: input.clinicId,
@@ -119,7 +120,7 @@ export class StaffService {
     };
   }
 
-  async searchStaff(clinicId?: string, includeInactive = false, orgId?: string): Promise<StaffResponse[]> {
+  async searchStaff(clinicId?: string, includeInactive = false, orgId?: string, tx: Tx = defaultTx): Promise<StaffResponse[]> {
     const roleStatus: UserStatus | { in: UserStatus[] } = includeInactive
       ? { in: ['ACTIVE', 'DISABLED'] }
       : 'ACTIVE';
@@ -130,7 +131,7 @@ export class StaffService {
       // no clinicRole) and any role-less members are included.
       : { orgId };
 
-    const users = await prisma.user.findMany({
+    const users = await tx.user.findMany({
       where: { ...where, status: { not: 'PENDING' as const } },
       include: { clinicRoles: { include: { clinic: { select: { id: true, name: true } } } } },
     });
@@ -141,8 +142,8 @@ export class StaffService {
     }));
   }
 
-  async getPendingInvites(orgId: string, clinicId?: string) {
-    const invites = await prisma.invite.findMany({
+  async getPendingInvites(orgId: string, clinicId?: string, tx: Tx = defaultTx) {
+    const invites = await tx.invite.findMany({
       where: {
         orgId,
         ...(clinicId && { clinicId }),
@@ -157,21 +158,21 @@ export class StaffService {
       phone: inv.phone,
       role: inv.role,
       status: inv.status,
-      token: inv.token, // raw token for manual (dev) copy — verifiable by accept-invite
+      token: inv.token, // raw token for manual (dev) copy â€” verifiable by accept-invite
       clinicName: inv.clinic?.name || 'All Clinics',
       createdAt: inv.createdAt,
     }));
   }
 
-  async cancelInvite(inviteId: string, orgId: string): Promise<void> {
-    const invite = await prisma.invite.findFirst({ where: { id: inviteId, orgId } });
+  async cancelInvite(inviteId: string, orgId: string, tx: Tx = defaultTx): Promise<void> {
+    const invite = await tx.invite.findFirst({ where: { id: inviteId, orgId } });
     if (!invite) throw new Error('Invitation not found');
     if (invite.status !== 'pending') throw new Error('Invitation can no longer be cancelled');
-    await prisma.invite.update({ where: { id: inviteId }, data: { status: 'cancelled' } });
+    await tx.invite.update({ where: { id: inviteId }, data: { status: 'cancelled' } });
   }
 
-  async getStaffById(userId: string): Promise<(StaffResponse & { orgId: string }) | null> {
-    const user = await prisma.user.findUnique({
+  async getStaffById(userId: string, tx: Tx = defaultTx): Promise<(StaffResponse & { orgId: string }) | null> {
+    const user = await tx.user.findUnique({
       where: { id: userId },
       include: { clinicRoles: { include: { clinic: { select: { name: true } } } } },
     });
@@ -183,15 +184,15 @@ export class StaffService {
     };
   }
 
-  private async assertSameOrg(userId: string, orgId: string): Promise<void> {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { orgId: true } });
+  private async assertSameOrg(userId: string, orgId: string, tx: Tx = defaultTx): Promise<void> {
+    const user = await tx.user.findUnique({ where: { id: userId }, select: { orgId: true } });
     if (!user || user.orgId !== orgId) {
       throw new ForbiddenError('User does not belong to your organization');
     }
   }
 
-  async updateRole(userId: string, input: UpdateStaffRoleInput, orgId: string, actorId?: string): Promise<ClinicRoleResponse> {
-    await this.assertSameOrg(userId, orgId);
+  async updateRole(userId: string, input: UpdateStaffRoleInput, orgId: string, actorId?: string, tx: Tx = defaultTx): Promise<ClinicRoleResponse> {
+    await this.assertSameOrg(userId, orgId, tx);
     const data: any = { role: input.role as UserRoleType, isPrimary: input.isPrimary };
     if (input.designation !== undefined) data.designation = input.designation;
     if (input.wageType !== undefined) data.wageType = input.wageType;
@@ -201,7 +202,7 @@ export class StaffService {
     if (input.joiningDate !== undefined) data.joiningDate = input.joiningDate;
     if (input.department !== undefined) data.department = input.department;
 
-    const role = await prisma.userClinicRole.upsert({
+    const role = await tx.userClinicRole.upsert({
       where: { userId_clinicId: { userId, clinicId: input.clinicId } },
       create: {
         userId,
@@ -223,20 +224,20 @@ export class StaffService {
       entityType: 'STAFF_ROLE',
       entityId: `${userId}:${input.clinicId}`,
       after: this.formatRole(role),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatRole(role);
   }
 
-  async deactivateStaff(userId: string, clinicId?: string, orgId?: string, actorId?: string): Promise<void> {
-    if (orgId) await this.assertSameOrg(userId, orgId);
+  async deactivateStaff(userId: string, clinicId?: string, orgId?: string, actorId?: string, tx: Tx = defaultTx): Promise<void> {
+    if (orgId) await this.assertSameOrg(userId, orgId, tx);
     if (clinicId) {
-      await prisma.userClinicRole.updateMany({
+      await tx.userClinicRole.updateMany({
         where: { userId, clinicId },
         data: { status: 'DISABLED' },
       });
     } else {
-      await prisma.user.update({ where: { id: userId }, data: { status: 'DISABLED' } });
+      await tx.user.update({ where: { id: userId }, data: { status: 'DISABLED' } });
     }
 
     if (orgId) {
@@ -247,20 +248,20 @@ export class StaffService {
         action: 'DEACTIVATE',
         entityType: 'STAFF',
         entityId: userId,
-      }).catch(() => {});
+      }, tx).catch(() => {});
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // SCHEDULES
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async setSchedule(input: StaffScheduleInput): Promise<ShiftScheduleResponse> {
-    const schedule = await prisma.staffSchedule.upsert({
+  async setSchedule(input: StaffScheduleInput, tx: Tx = defaultTx): Promise<ShiftScheduleResponse> {
+    const schedule = await tx.staffSchedule.upsert({
       where: { id: input.clinicId + '_' + input.userId + '_' + input.dayOfWeek } as any,
       create: {
         clinicId: input.clinicId,
-        orgId: (await prisma.clinic.findUnique({ where: { id: input.clinicId } }))!.orgId,
+        orgId: (await tx.clinic.findUnique({ where: { id: input.clinicId } }))!.orgId,
         userId: input.userId,
         dayOfWeek: input.dayOfWeek,
         startTime: input.startTime,
@@ -281,8 +282,8 @@ export class StaffService {
     return this.formatSchedule(schedule);
   }
 
-  async getSchedules(userId: string, clinicId?: string): Promise<ShiftScheduleResponse[]> {
-    const schedules = await prisma.staffSchedule.findMany({
+  async getSchedules(userId: string, clinicId?: string, tx: Tx = defaultTx): Promise<ShiftScheduleResponse[]> {
+    const schedules = await tx.staffSchedule.findMany({
       where: {
         userId,
         ...(clinicId && { clinicId }),
@@ -294,8 +295,8 @@ export class StaffService {
   }
 
   // All schedules for a clinic, keyed for a weekly grid.
-  async getClinicSchedules(clinicId: string): Promise<ShiftScheduleResponse[]> {
-    const schedules = await prisma.staffSchedule.findMany({
+  async getClinicSchedules(clinicId: string, tx: Tx = defaultTx): Promise<ShiftScheduleResponse[]> {
+    const schedules = await tx.staffSchedule.findMany({
       where: { clinicId },
       include: { clinic: { select: { name: true } } },
       orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],

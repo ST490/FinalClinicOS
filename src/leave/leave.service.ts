@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import {
   CreateLeaveInput, ListLeaveInput, LeaveBalance, LeaveResponse,
   UpdateLeaveStatusInput, LEAVE_ALLOTTED,
@@ -37,13 +38,13 @@ function toResponse(record: any): LeaveResponse {
 }
 
 export class LeaveService {
-  async create(input: CreateLeaveInput): Promise<LeaveResponse> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async create(input: CreateLeaveInput, tx: Tx = defaultTx): Promise<LeaveResponse> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
-    const user = await prisma.user.findUnique({ where: { id: input.userId } });
+    const user = await tx.user.findUnique({ where: { id: input.userId } });
     if (!user) throw new Error('User not found');
 
-    const record = await prisma.leaveRequest.create({
+    const record = await tx.leaveRequest.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -60,7 +61,7 @@ export class LeaveService {
     return toResponse(record);
   }
 
-  async list(input: ListLeaveInput): Promise<{ data: LeaveResponse[]; pagination: any }> {
+  async list(input: ListLeaveInput, tx: Tx = defaultTx): Promise<{ data: LeaveResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 50, 100);
     const skip = (page - 1) * limit;
@@ -79,14 +80,14 @@ export class LeaveService {
     };
 
     const [records, total] = await Promise.all([
-      prisma.leaveRequest.findMany({
+      tx.leaveRequest.findMany({
         where,
         skip,
         take: limit,
         orderBy: [{ appliedOn: 'desc' }],
         include: leaveInclude,
       }),
-      prisma.leaveRequest.count({ where }),
+      tx.leaveRequest.count({ where }),
     ]);
 
     return {
@@ -95,12 +96,12 @@ export class LeaveService {
     };
   }
 
-  async updateStatus(id: string, input: UpdateLeaveStatusInput): Promise<LeaveResponse> {
-    const existing = await prisma.leaveRequest.findUnique({ where: { id } });
+  async updateStatus(id: string, input: UpdateLeaveStatusInput, tx: Tx = defaultTx): Promise<LeaveResponse> {
+    const existing = await tx.leaveRequest.findUnique({ where: { id } });
     if (!existing) throw new Error('Leave request not found');
     if (existing.status !== 'PENDING') throw new Error('Leave request already reviewed');
 
-    const record = await prisma.leaveRequest.update({
+    const record = await tx.leaveRequest.update({
       where: { id },
       data: {
         status: input.status,
@@ -112,15 +113,15 @@ export class LeaveService {
     return toResponse(record);
   }
 
-  async balances(clinicId: string, year: number = new Date().getUTCFullYear()): Promise<LeaveBalance[]> {
-    const roles = await prisma.userClinicRole.findMany({
+  async balances(clinicId: string, year: number = new Date().getUTCFullYear(), tx: Tx = defaultTx): Promise<LeaveBalance[]> {
+    const roles = await tx.userClinicRole.findMany({
       where: { clinicId },
       include: { user: { select: { name: true } } },
     });
 
     const start = new Date(Date.UTC(year, 0, 1));
     const end = new Date(Date.UTC(year + 1, 0, 1));
-    const approved = await prisma.leaveRequest.findMany({
+    const approved = await tx.leaveRequest.findMany({
       where: { clinicId, status: 'APPROVED', fromDate: { gte: start, lt: end } },
       select: { userId: true, days: true },
     });

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import {
   CreateOrgInput,
   CreateClinicInput,
@@ -11,12 +12,12 @@ import {
 } from './types/org.types.js';
 
 export class OrgService {
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // ORGANIZATION
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async createOrg(input: CreateOrgInput): Promise<OrgResponse> {
-    const org = await prisma.organization.create({
+  async createOrg(input: CreateOrgInput, tx: Tx = defaultTx): Promise<OrgResponse> {
+    const org = await tx.organization.create({
       data: {
         name: input.name,
         country: input.country,
@@ -28,8 +29,8 @@ export class OrgService {
     return this.formatOrg(org);
   }
 
-  async getOrg(id: string): Promise<OrgResponse | null> {
-    const org = await prisma.organization.findUnique({
+  async getOrg(id: string, tx: Tx = defaultTx): Promise<OrgResponse | null> {
+    const org = await tx.organization.findUnique({
       where: { id },
       include: { _count: { select: { clinics: true } } },
     });
@@ -38,26 +39,26 @@ export class OrgService {
     return this.formatOrg(org, org._count.clinics);
   }
 
-  async updateOrg(id: string, data: { name?: string; plan?: string; status?: string }): Promise<OrgResponse> {
-    const org = await prisma.organization.update({
+  async updateOrg(id: string, data: { name?: string; plan?: string; status?: string }, tx: Tx = defaultTx): Promise<OrgResponse> {
+    const org = await tx.organization.update({
       where: { id },
       data: { name: data.name, plan: data.plan, status: data.status as any },
     });
     return this.formatOrg(org);
   }
 
-  async deleteOrg(id: string): Promise<void> {
+  async deleteOrg(id: string, tx: Tx = defaultTx): Promise<void> {
     // Soft delete org and all its clinics
-    await prisma.organization.update({ where: { id }, data: { status: 'SUSPENDED' } });
-    await prisma.clinic.updateMany({ where: { orgId: id }, data: { status: 'DELETED', deletedAt: new Date() } });
+    await tx.organization.update({ where: { id }, data: { status: 'SUSPENDED' } });
+    await tx.clinic.updateMany({ where: { orgId: id }, data: { status: 'DELETED', deletedAt: new Date() } });
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // CLINIC
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  async createClinic(orgId: string, input: CreateClinicInput): Promise<ClinicResponse> {
-    const clinic = await prisma.clinic.create({
+  async createClinic(orgId: string, input: CreateClinicInput, tx: Tx = defaultTx): Promise<ClinicResponse> {
+    const clinic = await tx.clinic.create({
       data: {
         orgId,
         name: input.name,
@@ -77,24 +78,24 @@ export class OrgService {
     });
 
     // Audit log
-    await this.logAudit(orgId, null, 'CLINIC_CREATED', 'Clinic', clinic.id, null, { name: clinic.name });
+    await this.logAudit(orgId, null, 'CLINIC_CREATED', 'Clinic', clinic.id, null, { name: clinic.name }, tx);
 
     return this.formatClinic(clinic);
   }
 
-  async getClinic(id: string): Promise<ClinicResponse | null> {
-    const clinic = await prisma.clinic.findUnique({
+  async getClinic(id: string, tx: Tx = defaultTx): Promise<ClinicResponse | null> {
+    const clinic = await tx.clinic.findUnique({
       where: { id },
       include: { org: { select: { name: true } } },
     });
     return clinic ? this.formatClinic(clinic) : null;
   }
 
-  async updateClinic(id: string, input: UpdateClinicInput): Promise<ClinicResponse> {
-    const existing = await prisma.clinic.findUnique({ where: { id }, select: { orgId: true } });
+  async updateClinic(id: string, input: UpdateClinicInput, tx: Tx = defaultTx): Promise<ClinicResponse> {
+    const existing = await tx.clinic.findUnique({ where: { id }, select: { orgId: true } });
     if (!existing) throw new Error('Clinic not found');
 
-    const clinic = await prisma.clinic.update({
+    const clinic = await tx.clinic.update({
       where: { id },
       data: {
         name: input.name,
@@ -113,13 +114,13 @@ export class OrgService {
       include: { org: { select: { name: true } } },
     });
 
-    await this.logAudit(existing.orgId, id, 'CLINIC_UPDATED', 'Clinic', id, { status: 'before' }, { status: 'after' });
+    await this.logAudit(existing.orgId, id, 'CLINIC_UPDATED', 'Clinic', id, { status: 'before' }, { status: 'after' }, tx);
 
     return this.formatClinic(clinic);
   }
 
-  async updateBranding(id: string, input: BrandingInput): Promise<ClinicResponse> {
-    const existing = await prisma.clinic.findUnique({
+  async updateBranding(id: string, input: BrandingInput, tx: Tx = defaultTx): Promise<ClinicResponse> {
+    const existing = await tx.clinic.findUnique({
       where: { id },
       select: { orgId: true, landingPageSlug: true },
     });
@@ -127,13 +128,13 @@ export class OrgService {
 
     // Check slug uniqueness if changing
     if (input.landingPageSlug && input.landingPageSlug !== existing.landingPageSlug) {
-      const conflict = await prisma.clinic.findFirst({
+      const conflict = await tx.clinic.findFirst({
         where: { landingPageSlug: input.landingPageSlug, id: { not: id }, deletedAt: null },
       });
       if (conflict) throw new Error('Landing page slug already taken');
     }
 
-    const clinic = await prisma.clinic.update({
+    const clinic = await tx.clinic.update({
       where: { id },
       data: {
         logoUrl: input.logoUrl,
@@ -147,19 +148,19 @@ export class OrgService {
     return this.formatClinic(clinic);
   }
 
-  async deleteClinic(id: string): Promise<void> {
-    const clinic = await prisma.clinic.findUnique({ where: { id }, select: { orgId: true, name: true } });
+  async deleteClinic(id: string, tx: Tx = defaultTx): Promise<void> {
+    const clinic = await tx.clinic.findUnique({ where: { id }, select: { orgId: true, name: true } });
     if (!clinic) throw new Error('Clinic not found');
 
-    await prisma.clinic.update({
+    await tx.clinic.update({
       where: { id },
       data: { status: 'DELETED', deletedAt: new Date() },
     });
 
-    await this.logAudit(clinic.orgId, id, 'CLINIC_DELETED', 'Clinic', id, null, { name: clinic.name });
+    await this.logAudit(clinic.orgId, id, 'CLINIC_DELETED', 'Clinic', id, null, { name: clinic.name }, tx);
   }
 
-  async searchClinics(input: SearchClinicsInput): Promise<{ data: ClinicResponse[]; pagination: any }> {
+  async searchClinics(input: SearchClinicsInput, tx: Tx = defaultTx): Promise<{ data: ClinicResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -172,14 +173,14 @@ export class OrgService {
     };
 
     const [clinics, total] = await Promise.all([
-      prisma.clinic.findMany({
+      tx.clinic.findMany({
         where,
         skip,
         take: limit,
         orderBy: { [input.sortBy || 'createdAt']: input.sortOrder || 'desc' },
         include: { org: { select: { name: true } } },
       }),
-      prisma.clinic.count({ where }),
+      tx.clinic.count({ where }),
     ]);
 
     return {
@@ -188,9 +189,9 @@ export class OrgService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // HELPERS
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   private formatOrg(org: any, clinicCount?: number): OrgResponse {
     return {
@@ -233,8 +234,8 @@ export class OrgService {
     };
   }
 
-  private async logAudit(orgId: string, clinicId: string | null, action: string, entityType: string, entityId: string, before: any, after: any): Promise<void> {
-    await prisma.auditLog.create({
+  private async logAudit(orgId: string, clinicId: string | null, action: string, entityType: string, entityId: string, before: any, after: any, tx: Tx = defaultTx): Promise<void> {
+    await tx.auditLog.create({
       data: {
         orgId,
         clinicId,
@@ -245,7 +246,7 @@ export class OrgService {
         before: before || null,
         after: after || null,
       },
-    }).catch(() => {/* noop — audit failures shouldn't break operations */});
+    }).catch(() => {/* noop â€” audit failures shouldn't break operations */});
   }
 }
 

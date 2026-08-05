@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { auditService } from '../audit/audit.service.js';
 import {
   CreatePatientInput,
@@ -10,12 +11,12 @@ import {
 } from './types/patient.types.js';
 
 export class PatientService {
-  async create(input: CreatePatientInput): Promise<PatientResponse> {
+  async create(input: CreatePatientInput, tx: Tx = defaultTx): Promise<PatientResponse> {
     // Lookup clinic to get orgId
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    const patient = await prisma.patient.create({
+    const patient = await tx.patient.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -36,7 +37,6 @@ export class PatientService {
         whatsappConsent: input.whatsappConsent || false,
         smsConsent: input.smsConsent || false,
         createdById: input.createdById,
-        // orgId is derived from clinic in a transaction
       },
       include: {
         _count: {
@@ -45,7 +45,7 @@ export class PatientService {
       },
     });
 
-    // ponytail: best-effort audit — never fail the create if logging errors.
+    // ponytail: best-effort audit â€” never fail the create if logging errors.
     await auditService.log({
       orgId: clinic.orgId,
       clinicId: input.clinicId,
@@ -54,16 +54,16 @@ export class PatientService {
       entityType: 'PATIENT',
       entityId: patient.id,
       after: this.formatPatient(patient),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatPatient(patient);
   }
 
-  async update(id: string, input: UpdatePatientInput, actorId?: string): Promise<PatientResponse> {
-    const scope = await prisma.patient.findUnique({ where: { id }, select: { orgId: true, clinicId: true } });
+  async update(id: string, input: UpdatePatientInput, actorId?: string, tx: Tx = defaultTx): Promise<PatientResponse> {
+    const scope = await tx.patient.findUnique({ where: { id }, select: { orgId: true, clinicId: true } });
     if (!scope) throw new Error('Patient not found');
 
-    const patient = await prisma.patient.update({
+    const patient = await tx.patient.update({
       where: { id },
       data: {
         ...(input.name !== undefined && { name: input.name }),
@@ -98,13 +98,13 @@ export class PatientService {
       entityType: 'PATIENT',
       entityId: id,
       after: this.formatPatient(patient),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatPatient(patient);
   }
 
-  async findById(id: string): Promise<PatientResponse | null> {
-    const patient = await prisma.patient.findUnique({
+  async findById(id: string, tx: Tx = defaultTx): Promise<PatientResponse | null> {
+    const patient = await tx.patient.findUnique({
       where: { id },
       include: {
         visits: { take: 10, orderBy: { visitDate: 'desc' } },
@@ -117,7 +117,7 @@ export class PatientService {
     return patient ? this.formatPatient(patient) : null;
   }
 
-  async search(input: PatientSearchInput): Promise<PaginatedPatientsResponse> {
+  async search(input: PatientSearchInput, tx: Tx = defaultTx): Promise<PaginatedPatientsResponse> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -147,7 +147,7 @@ export class PatientService {
 
     // Execute query
     const [patients, total] = await Promise.all([
-      prisma.patient.findMany({
+      tx.patient.findMany({
         where,
         skip,
         take: limit,
@@ -158,7 +158,7 @@ export class PatientService {
           },
         },
       }),
-      prisma.patient.count({ where }),
+      tx.patient.count({ where }),
     ]);
 
     return {
@@ -172,16 +172,16 @@ export class PatientService {
     };
   }
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, tx: Tx = defaultTx): Promise<void> {
     // Soft delete
-    await prisma.patient.update({
+    await tx.patient.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
   }
 
-  async addTag(id: string, tag: string): Promise<PatientResponse> {
-    const patient = await prisma.patient.update({
+  async addTag(id: string, tag: string, tx: Tx = defaultTx): Promise<PatientResponse> {
+    const patient = await tx.patient.update({
       where: { id },
       data: {
         tags: { push: tag },
@@ -193,12 +193,12 @@ export class PatientService {
     return this.formatPatient(patient);
   }
 
-  async removeTag(id: string, tag: string): Promise<PatientResponse> {
-    const patient = await prisma.patient.findUnique({ where: { id } });
+  async removeTag(id: string, tag: string, tx: Tx = defaultTx): Promise<PatientResponse> {
+    const patient = await tx.patient.findUnique({ where: { id } });
     if (!patient) throw new Error('Patient not found');
 
     const updatedTags = patient.tags.filter((t) => t !== tag);
-    const updated = await prisma.patient.update({
+    const updated = await tx.patient.update({
       where: { id },
       data: { tags: updatedTags },
       include: {
@@ -208,8 +208,8 @@ export class PatientService {
     return this.formatPatient(updated);
   }
 
-  async getPatientStats(id: string) {
-    const patient = await prisma.patient.findUnique({
+  async getPatientStats(id: string, tx: Tx = defaultTx) {
+    const patient = await tx.patient.findUnique({
       where: { id },
       select: {
         id: true,
@@ -228,13 +228,13 @@ export class PatientService {
     if (!patient) throw new Error('Patient not found');
 
     const [recentVisits, recentAppointments, dueAmount] = await Promise.all([
-      prisma.patientVisit.count({
+      tx.patientVisit.count({
         where: { patientId: id },
       }),
-      prisma.appointment.count({
+      tx.appointment.count({
         where: { patientId: id },
       }),
-      prisma.due.aggregate({
+      tx.due.aggregate({
         where: { patientId: id, status: { in: ['DUE', 'PARTIAL'] } },
         _sum: { amountDue: true, amountPaid: true },
       }),

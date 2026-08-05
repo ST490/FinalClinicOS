@@ -2,7 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { auditService } from './audit.service.js';
 import { authenticate, loadUserRoles } from '../auth/middleware/index.js';
-import { withTenant } from '../config/tenant-session.js';
+import { withTenant, withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -20,16 +20,16 @@ const searchSchema = z.object({
 });
 
 // Admin-only: view audit logs
-router.get('/audit', authenticate, loadUserRoles, async (req, res, next) => {
+router.get('/audit', authenticate, loadUserRoles, withTenantHandler(async (req, res, next, tx) => {
   try {
     // Only org owners can view audit logs
     if (!req.user?.isOrgOwner) {
       res.status(403).json({ error: { code: 'FORBIDDEN' } }); return;
     }
-    const result = await auditService.search(searchSchema.parse(req.query));
+    const result = await auditService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
 router.get('/audit/entity/:entityType/:entityId', authenticate, loadUserRoles, async (req, res, next) => {
   try {

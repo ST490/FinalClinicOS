@@ -1,15 +1,16 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { enqueueReminderSend } from '../jobs/queue.js';
 import { reminderProcessor } from '../notifications/reminder-processor.js';
 import { CreateReminderInput, ReminderResponse, SearchRemindersInput } from './types/reminder.types.js';
 
 export class ReminderService {
-  async create(input: CreateReminderInput): Promise<ReminderResponse> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async create(input: CreateReminderInput, tx: Tx = defaultTx): Promise<ReminderResponse> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    const reminder = await prisma.reminder.create({
+    const reminder = await tx.reminder.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -24,7 +25,7 @@ export class ReminderService {
       include: { patient: { select: { name: true } } },
     });
 
-    // ponytail: schedule via BullMQ instead of inline send — survives restarts and retries with backoff
+    // ponytail: schedule via BullMQ instead of inline send â€” survives restarts and retries with backoff
     const queued = await enqueueReminderSend(reminder.id, reminder.scheduledAt);
 
     // Fallback for when Redis (and thus BullMQ) is unavailable: best-effort
@@ -39,7 +40,7 @@ export class ReminderService {
     return this.formatReminder(reminder);
   }
 
-  async search(input: SearchRemindersInput): Promise<{ data: ReminderResponse[]; pagination: any }> {
+  async search(input: SearchRemindersInput, tx: Tx = defaultTx): Promise<{ data: ReminderResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -53,14 +54,14 @@ export class ReminderService {
     };
 
     const [reminders, total] = await Promise.all([
-      prisma.reminder.findMany({
+      tx.reminder.findMany({
         where,
         skip,
         take: limit,
         orderBy: { scheduledAt: 'desc' },
         include: { patient: { select: { name: true } } },
       }),
-      prisma.reminder.count({ where }),
+      tx.reminder.count({ where }),
     ]);
 
     return {
@@ -72,7 +73,8 @@ export class ReminderService {
   async updateStatus(
     providerMessageId: string,
     status: 'SENT' | 'DELIVERED' | 'READ' | 'FAILED',
-    error?: string
+    error?: string,
+    tx: Tx = defaultTx,
   ): Promise<void> {
     const update: any = { status: status as any };
     if (status === 'SENT') update.sentAt = new Date();
@@ -82,14 +84,14 @@ export class ReminderService {
       update.retryCount = { increment: 1 };
     }
 
-    await prisma.reminder.updateMany({
+    await tx.reminder.updateMany({
       where: { providerMessageId },
       data: update,
     });
   }
 
-  async getPendingReminders(clinicId: string): Promise<ReminderResponse[]> {
-    const reminders = await prisma.reminder.findMany({
+  async getPendingReminders(clinicId: string, tx: Tx = defaultTx): Promise<ReminderResponse[]> {
+    const reminders = await tx.reminder.findMany({
       where: {
         clinicId,
         status: 'PENDING',

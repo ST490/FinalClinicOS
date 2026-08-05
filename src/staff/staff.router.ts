@@ -4,6 +4,7 @@ import { UserRoleType } from '@prisma/client';
 import { staffService } from './staff.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import { hasPermission, Permission } from '../auth/types/permissions.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -59,12 +60,12 @@ function checkPerm(permission: Permission) {
 }
 
 // Invite
-router.post('/staff/invite', authenticate, loadUserRoles, checkPerm('staff:invite'), requireClinicAccess, async (req, res, next) => {
+router.post('/staff/invite', authenticate, loadUserRoles, checkPerm('staff:invite'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await staffService.invite({ ...inviteSchema.parse(req.body), invitedById: req.user!.id });
+    const result = await staffService.invite({ ...inviteSchema.parse(req.body), invitedById: req.user!.id }, tx);
     res.status(201).json(result);
   } catch (e) { next(e); }
-});
+}));
 
 // Direct-add non-clinical support staff (SUPPORT) as ACTIVE — no invite/login.
 // RECEPTIONIST/HR still go through the manual invite flow.
@@ -80,12 +81,12 @@ const directAddSchema = z.object({
   employmentType: z.enum(['PERMANENT', 'CONTRACT']).optional(),
 });
 
-router.post('/staff/direct-add', authenticate, loadUserRoles, checkPerm('staff:invite'), requireClinicAccess, async (req, res, next) => {
+router.post('/staff/direct-add', authenticate, loadUserRoles, checkPerm('staff:invite'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await staffService.directAdd({ ...directAddSchema.parse(req.body), orgId: req.user!.orgId });
+    const result = await staffService.directAdd({ ...directAddSchema.parse(req.body), orgId: req.user!.orgId }, tx);
     res.status(201).json(result);
   } catch (e) { next(e); }
-});
+}));
 
 // Accept invite (public)
 router.post('/staff/accept', async (req, res, next) => {
@@ -96,29 +97,29 @@ router.post('/staff/accept', async (req, res, next) => {
 });
 
 // List staff
-router.get('/staff', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/staff', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const staff = await staffService.searchStaff(req.query.clinicId as string, req.query.includeInactive === 'true', req.user!.orgId);
+    const staff = await staffService.searchStaff(req.query.clinicId as string, req.query.includeInactive === 'true', req.user!.orgId, tx);
     res.json(staff);
   } catch (e) { next(e); }
-});
+}));
 
 // List pending invites
-router.get('/staff/invites', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/staff/invites', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const clinicId = req.query.clinicId as string;
     const orgId = req.user!.orgId;
-    const invites = await staffService.getPendingInvites(orgId, clinicId);
+    const invites = await staffService.getPendingInvites(orgId, clinicId, tx);
     res.json(invites);
   } catch (e) { next(e); }
-});
+}));
 
 // Get one staff
-router.get('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:read'), async (req, res, next) => {
+router.get('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:read'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    const staff = await staffService.getStaffById(req.params.userId as string);
+    const staff = await staffService.getStaffById(req.params.userId as string, tx);
     if (!staff) { res.status(404).json({ error: { code: 'NOT_FOUND' } }); return; }
-    
+
     // Ownership check
     if (req.user!.isOrgOwner) {
       if (staff.orgId !== req.user!.orgId) {
@@ -130,7 +131,7 @@ router.get('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:read'
       const userClinicIds = req.user!.roles.map(r => r.clinicId);
       const staffClinicIds = staff.clinicRoles?.map((r: any) => r.clinicId) || [];
       const shareClinic = userClinicIds.some(cid => staffClinicIds.includes(cid));
-      
+
       if (!isSelf && !shareClinic) {
         res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
         return;
@@ -138,55 +139,55 @@ router.get('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:read'
     }
     res.json(staff);
   } catch (e) { next(e); }
-});
+}));
 
 // Update role
-router.patch('/staff/:userId/role', authenticate, loadUserRoles, checkPerm('staff:manage'), requireClinicAccess, async (req, res, next) => {
+router.patch('/staff/:userId/role', authenticate, loadUserRoles, checkPerm('staff:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const role = await staffService.updateRole(req.params.userId as string, roleSchema.parse(req.body), req.user!.orgId, req.user!.id);
+    const role = await staffService.updateRole(req.params.userId as string, roleSchema.parse(req.body), req.user!.orgId, req.user!.id, tx);
     res.json(role);
   } catch (e) { next(e); }
-});
+}));
 
 // Cancel a pending invitation
-router.delete('/staff/invites/:inviteId', authenticate, loadUserRoles, checkPerm('staff:invite'), async (req, res, next) => {
+router.delete('/staff/invites/:inviteId', authenticate, loadUserRoles, checkPerm('staff:invite'), withTenantHandler(async (req, res, next, tx) => {
   try {
-    await staffService.cancelInvite(req.params.inviteId as string, req.user!.orgId);
+    await staffService.cancelInvite(req.params.inviteId as string, req.user!.orgId, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
 // Deactivate
-router.delete('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:delete'), requireClinicAccess, async (req, res, next) => {
+router.delete('/staff/:userId', authenticate, loadUserRoles, checkPerm('staff:delete'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    await staffService.deactivateStaff(req.params.userId as string, req.query.clinicId as string, req.user!.orgId, req.user!.id);
+    await staffService.deactivateStaff(req.params.userId as string, req.query.clinicId as string, req.user!.orgId, req.user!.id, tx);
     res.json({ success: true });
   } catch (e) { next(e); }
-});
+}));
 
 // Schedules
 // Clinic-wide schedules (weekly grid)
-router.get('/staff/schedules', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/staff/schedules', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
     const clinicId = req.query.clinicId as string;
     if (!clinicId) { res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'clinicId is required' } }); return; }
-    const schedules = await staffService.getClinicSchedules(clinicId);
+    const schedules = await staffService.getClinicSchedules(clinicId, tx);
     res.json(schedules);
   } catch (e) { next(e); }
-});
+}));
 
-router.post('/staff/schedules', authenticate, loadUserRoles, checkPerm('staff:manage'), requireClinicAccess, async (req, res, next) => {
+router.post('/staff/schedules', authenticate, loadUserRoles, checkPerm('staff:manage'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const schedule = await staffService.setSchedule(scheduleSchema.parse(req.body));
+    const schedule = await staffService.setSchedule(scheduleSchema.parse(req.body), tx);
     res.status(201).json(schedule);
   } catch (e) { next(e); }
-});
+}));
 
-router.get('/staff/:userId/schedules', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, async (req, res, next) => {
+router.get('/staff/:userId/schedules', authenticate, loadUserRoles, checkPerm('staff:read'), requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const schedules = await staffService.getSchedules(req.params.userId as string, req.query.clinicId as string);
+    const schedules = await staffService.getSchedules(req.params.userId as string, req.query.clinicId as string, tx);
     res.json(schedules);
   } catch (e) { next(e); }
-});
+}));
 
 export default router;

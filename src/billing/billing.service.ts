@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 import { ForbiddenError } from '../common/errors.js';
 import { auditService } from '../audit/audit.service.js';
 import {
@@ -12,20 +13,20 @@ import {
 } from './types/billing.types.js';
 
 export class BillingService {
-  async createDue(input: CreateDueInput): Promise<DueResponse> {
-    const clinic = await prisma.clinic.findUnique({ where: { id: input.clinicId } });
+  async createDue(input: CreateDueInput, tx: Tx = defaultTx): Promise<DueResponse> {
+    const clinic = await tx.clinic.findUnique({ where: { id: input.clinicId } });
     if (!clinic) throw new Error('Clinic not found');
 
-    // ponytail: tenant scoping — the billed patient must belong to this org.
+    // ponytail: tenant scoping â€” the billed patient must belong to this org.
     if (input.patientId) {
-      const patient = await prisma.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
+      const patient = await tx.patient.findUnique({ where: { id: input.patientId }, select: { orgId: true } });
       if (!patient || patient.orgId !== clinic.orgId) throw new ForbiddenError('Patient does not belong to this organization');
     }
 
     const amountPaid = input.amountPaid || 0;
     const amountDue = input.totalAmount - amountPaid;
 
-    const due = await prisma.due.create({
+    const due = await tx.due.create({
       data: {
         clinicId: input.clinicId,
         orgId: clinic.orgId,
@@ -56,19 +57,19 @@ export class BillingService {
       entityType: 'DUE',
       entityId: due.id,
       after: this.formatDue(due),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatDue(due);
   }
 
-  async recordPayment(id: string, input: RecordPaymentInput): Promise<DueResponse> {
-    const existing = await prisma.due.findUnique({ where: { id } });
+  async recordPayment(id: string, input: RecordPaymentInput, tx: Tx = defaultTx): Promise<DueResponse> {
+    const existing = await tx.due.findUnique({ where: { id } });
     if (!existing) throw new Error('Due not found');
 
     const newAmountPaid = Number(existing.amountPaid) + input.amount;
     const newAmountDue = Math.max(0, Number(existing.totalAmount) - newAmountPaid);
 
-    const due = await prisma.due.update({
+    const due = await tx.due.update({
       where: { id },
       data: {
         amountPaid: newAmountPaid,
@@ -90,13 +91,13 @@ export class BillingService {
       entityType: 'DUE',
       entityId: id,
       after: this.formatDue(due),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatDue(due);
   }
 
-  async waiveDue(id: string, input: WaiveDueInput): Promise<DueResponse> {
-    const due = await prisma.due.update({
+  async waiveDue(id: string, input: WaiveDueInput, tx: Tx = defaultTx): Promise<DueResponse> {
+    const due = await tx.due.update({
       where: { id },
       data: {
         amountDue: 0,
@@ -119,13 +120,13 @@ export class BillingService {
       entityType: 'DUE',
       entityId: id,
       after: this.formatDue(due),
-    }).catch(() => {});
+    }, tx).catch(() => {});
 
     return this.formatDue(due);
   }
 
-  async getDue(id: string): Promise<DueResponse | null> {
-    const due = await prisma.due.findUnique({
+  async getDue(id: string, tx: Tx = defaultTx): Promise<DueResponse | null> {
+    const due = await tx.due.findUnique({
       where: { id },
       include: {
         patient: { select: { id: true, name: true, phone: true } },
@@ -135,7 +136,7 @@ export class BillingService {
     return due ? this.formatDue(due) : null;
   }
 
-  async search(input: SearchDuesInput): Promise<{ data: DueResponse[]; pagination: any }> {
+  async search(input: SearchDuesInput, tx: Tx = defaultTx): Promise<{ data: DueResponse[]; pagination: any }> {
     const page = input.page || 1;
     const limit = Math.min(input.limit || 20, 100);
     const skip = (page - 1) * limit;
@@ -149,7 +150,7 @@ export class BillingService {
     };
 
     const [dues, total] = await Promise.all([
-      prisma.due.findMany({
+      tx.due.findMany({
         where,
         skip,
         take: limit,
@@ -159,7 +160,7 @@ export class BillingService {
           recordedBy: { select: { id: true, name: true } },
         },
       }),
-      prisma.due.count({ where }),
+      tx.due.count({ where }),
     ]);
 
     return {
@@ -168,11 +169,11 @@ export class BillingService {
     };
   }
 
-  async getPatientBalance(patientId: string): Promise<PatientBalanceResponse> {
-    const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+  async getPatientBalance(patientId: string, tx: Tx = defaultTx): Promise<PatientBalanceResponse> {
+    const patient = await tx.patient.findUnique({ where: { id: patientId } });
     if (!patient) throw new Error('Patient not found');
 
-    const pendingDues = await prisma.due.findMany({
+    const pendingDues = await tx.due.findMany({
       where: { patientId, status: { in: ['DUE', 'PARTIAL'] } },
       include: {
         patient: { select: { id: true, name: true, phone: true } },

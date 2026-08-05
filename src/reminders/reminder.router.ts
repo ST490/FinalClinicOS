@@ -4,6 +4,7 @@ import { reminderService } from './reminder.service.js';
 import { authenticate, loadUserRoles, requireClinicAccess } from '../auth/middleware/index.js';
 import twilio from 'twilio';
 import { config } from '../config/index.js';
+import { withTenantHandler } from '../config/tenant-session.js';
 
 const router = express.Router();
 
@@ -53,30 +54,30 @@ function verifyTwilioWebhook(req: express.Request, res: express.Response, next: 
 }
 
 // Create reminder (staff trigger)
-router.post('/reminders', authenticate, loadUserRoles, async (req, res, next) => {
+router.post('/reminders', authenticate, loadUserRoles, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const reminder = await reminderService.create(createSchema.parse(req.body));
+    const reminder = await reminderService.create(createSchema.parse(req.body), tx);
     res.status(201).json(reminder);
   } catch (e) { next(e); }
-});
+}));
 
 // Search reminders
-router.get('/reminders', authenticate, loadUserRoles, requireClinicAccess, async (req, res, next) => {
+router.get('/reminders', authenticate, loadUserRoles, requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const result = await reminderService.search(searchSchema.parse(req.query));
+    const result = await reminderService.search(searchSchema.parse(req.query), tx);
     res.json(result);
   } catch (e) { next(e); }
-});
+}));
 
 // Get pending reminders (for queue processor)
-router.get('/reminders/pending/:clinicId', authenticate, loadUserRoles, requireClinicAccess, async (req, res, next) => {
+router.get('/reminders/pending/:clinicId', authenticate, loadUserRoles, requireClinicAccess, withTenantHandler(async (req, res, next, tx) => {
   try {
-    const reminders = await reminderService.getPendingReminders(req.params.clinicId as string);
+    const reminders = await reminderService.getPendingReminders(req.params.clinicId as string, tx);
     res.json(reminders);
   } catch (e) { next(e); }
-});
+}));
 
-// WhatsApp BSP webhook
+// WhatsApp BSP webhook — no withTenantHandler (inbound webhook has no authenticated user)
 router.post('/webhooks/whatsapp-status', verifyTwilioWebhook, async (req, res, next) => {
   try {
     const { messageId, status, error } = webhookSchema.parse(req.body);

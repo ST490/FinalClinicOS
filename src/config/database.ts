@@ -10,9 +10,17 @@
 //   the Pool to DIRECT_URL (direct/session-mode connection) and only fall back
 //   to DATABASE_URL when DIRECT_URL is absent (e.g. local Postgres with no
 //   pooler). This preserves the tenant-isolation design from tenant-session.ts.
-import { Pool } from 'pg';
+import { Pool, PoolConfig } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
+
+/** Prisma 7 PoolConfig lacks `family`; pg accepts it at runtime for IPv4 pin. */
+interface ExtendedPoolConfig extends PoolConfig {
+  family?: number;
+}
+
+/** Transaction client type — services accept this to run inside withTenant. */
+export type Tx = Prisma.TransactionClient;
 
 declare global {
   // Prevent multiple instances during hot reload in development
@@ -29,7 +37,10 @@ function createPrismaClient(): PrismaClient {
         'The Prisma 7 driver adapter needs a connection string.',
     );
   }
-  const pool = new Pool({ connectionString: datasourceUrl });
+  // family:4 — pin to IPv4. The Supabase db.*.supabase.co host returns an
+  // AAAA (IPv6) record and Render's outbound can't reach it (ENETUNREACH).
+  // Prisma 7 PoolConfig lacks `family` but pg accepts it at runtime.
+  const pool = new Pool({ connectionString: datasourceUrl, family: 4 } as ExtendedPoolConfig);
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
@@ -47,4 +58,12 @@ if (process.env.NODE_ENV !== 'production') {
   global.prisma = prisma;
 }
 
+/**
+ * Default transaction client — allows services to default their `tx` param
+ * to the singleton when no withTenant transaction is active. Cast is safe
+ * because PrismaClient is a superset of TransactionClient.
+ */
+export const defaultTx: Tx = prisma as unknown as Tx;
+
 export default prisma;
+

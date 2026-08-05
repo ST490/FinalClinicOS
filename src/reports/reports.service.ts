@@ -1,4 +1,5 @@
-import { prisma } from '../config/database.js';
+import { defaultTx } from '../config/database.js';
+import type { Tx } from '../config/database.js';
 
 export interface RevenueReport {
   totalRevenue: string;
@@ -59,8 +60,8 @@ export interface LabourCostReport {
   byEmploymentType: { employmentType: string; cost: number; headcount: number }[];
 }
 
-export async function getRevenueReport(clinicId: string, fromDate: Date, toDate: Date): Promise<RevenueReport> {
-  const dues = await prisma.due.findMany({
+export async function getRevenueReport(clinicId: string, fromDate: Date, toDate: Date, tx: Tx = defaultTx): Promise<RevenueReport> {
+  const dues = await tx.due.findMany({
     where: { clinicId, createdAt: { gte: fromDate, lte: toDate } },
   });
 
@@ -98,17 +99,17 @@ export async function getRevenueReport(clinicId: string, fromDate: Date, toDate:
   };
 }
 
-export async function getPatientReport(clinicId: string, fromDate: Date, toDate: Date): Promise<PatientReport> {
-  const visits = await prisma.patientVisit.findMany({
+export async function getPatientReport(clinicId: string, fromDate: Date, toDate: Date, tx: Tx = defaultTx): Promise<PatientReport> {
+  const visits = await tx.patientVisit.findMany({
     where: { clinicId, visitDate: { gte: fromDate, lte: toDate } },
     select: { visitDate: true, patientId: true },
   });
 
-  // A patient is "new" only if their first-ever visit falls in the window —
+  // A patient is "new" only if their first-ever visit falls in the window â€”
   // not merely someone with a single visit inside it.
   const patientIds = Array.from(new Set(visits.map(v => v.patientId)));
   const earlierVisits = patientIds.length
-    ? await prisma.patientVisit.findMany({
+    ? await tx.patientVisit.findMany({
         where: {
           clinicId,
           patientId: { in: patientIds },
@@ -142,12 +143,12 @@ export async function getPatientReport(clinicId: string, fromDate: Date, toDate:
   };
 }
 
-export async function getInventoryReport(clinicId: string): Promise<InventoryReport> {
+export async function getInventoryReport(clinicId: string, tx: Tx = defaultTx): Promise<InventoryReport> {
   const [items, movements] = await Promise.all([
-    prisma.inventoryItem.findMany({
+    tx.inventoryItem.findMany({
       where: { clinicId, deletedAt: null },
     }),
-    prisma.stockMovement.groupBy({
+    tx.stockMovement.groupBy({
       by: ['inventoryItemId'],
       where: { clinicId, type: 'SALE', createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
       _sum: { quantityDelta: true },
@@ -181,8 +182,8 @@ export async function getInventoryReport(clinicId: string): Promise<InventoryRep
   return { lowStockItems, expiringItems, totalItems, outOfStock, topMovements };
 }
 
-export async function getStaffReport(clinicId: string, fromDate: Date, toDate: Date): Promise<StaffReport> {
-  const records = await prisma.staffAttendance.findMany({
+export async function getStaffReport(clinicId: string, fromDate: Date, toDate: Date, tx: Tx = defaultTx): Promise<StaffReport> {
+  const records = await tx.staffAttendance.findMany({
     where: { clinicId, date: { gte: fromDate, lte: toDate } },
     select: { date: true, status: true },
   });
@@ -219,8 +220,8 @@ export async function getStaffReport(clinicId: string, fromDate: Date, toDate: D
 }
 
 // Shared payroll aggregation (used by payroll + labour-cost reports).
-async function aggregatePayroll(clinicId: string, period?: string) {
-  const rows = await prisma.payroll.findMany({
+async function aggregatePayroll(clinicId: string, period: string | undefined, tx: Tx = defaultTx) {
+  const rows = await tx.payroll.findMany({
     where: { clinicId, ...(period && { period }) },
     include: { user: { select: { clinicRoles: true } } },
   });
@@ -236,8 +237,8 @@ async function aggregatePayroll(clinicId: string, period?: string) {
   return withMeta;
 }
 
-export async function getPayrollReport(clinicId: string, period?: string): Promise<PayrollReport> {
-  const rows = await aggregatePayroll(clinicId, period);
+export async function getPayrollReport(clinicId: string, period?: string, tx: Tx = defaultTx): Promise<PayrollReport> {
+  const rows = await aggregatePayroll(clinicId, period, tx);
   const periodVal = rows[0]?.period ?? null;
 
   const byDepartmentMap = new Map<string | null, { net: number; count: number }>();
@@ -268,8 +269,8 @@ export async function getPayrollReport(clinicId: string, period?: string): Promi
   };
 }
 
-export async function getLabourCostReport(clinicId: string, period?: string): Promise<LabourCostReport> {
-  const rows = await aggregatePayroll(clinicId, period);
+export async function getLabourCostReport(clinicId: string, period?: string, tx: Tx = defaultTx): Promise<LabourCostReport> {
+  const rows = await aggregatePayroll(clinicId, period, tx);
   const periodVal = rows[0]?.period ?? null;
 
   const byDeptMap = new Map<string | null, { cost: number; headcount: number }>();
@@ -296,8 +297,8 @@ export async function getLabourCostReport(clinicId: string, period?: string): Pr
   };
 }
 
-export async function getLeaveReport(clinicId: string, fromDate: Date, toDate: Date): Promise<LeaveReport> {
-  const leaves = await prisma.leaveRequest.findMany({
+export async function getLeaveReport(clinicId: string, fromDate: Date, toDate: Date, tx: Tx = defaultTx): Promise<LeaveReport> {
+  const leaves = await tx.leaveRequest.findMany({
     where: { clinicId, fromDate: { gte: fromDate }, toDate: { lte: toDate } },
   });
 
