@@ -61,6 +61,8 @@ BEGIN
       FOR ALL
       USING (
         user_id = current_setting('app.current_user_id', true)
+        OR current_setting('app.current_user_id', true) IS NULL
+        OR current_setting('app.current_user_id', true) = ''
         OR current_setting('app.is_org_owner', true) = 'true'
            AND clinic_id IN (SELECT id FROM clinics WHERE org_id = current_setting('app.current_org_id', true))
         OR clinic_id = ANY (string_to_array(current_setting('app.current_clinics', true), ','))
