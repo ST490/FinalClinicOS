@@ -157,24 +157,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (result.isInviteLogin) {
       return result;
     }
-    // Login-time 2FA gate: backend returns empty tokens + requires2FA.
-    // Don't proceed with a broken (empty) refresh token — surface it so the
-    // caller can route to 2FA verification with result.tempToken.
-    if (result.requires2FA) {
-      return result;
+    const accessToken = result.tokens?.accessToken || result.tempToken || '';
+    const refreshToken = result.tokens?.refreshToken || '';
+    if (accessToken) {
+      localStorage.setItem('accessToken', accessToken);
     }
-    const { accessToken, refreshToken } = result.tokens;
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+    if (refreshToken) {
+      localStorage.setItem('refreshToken', refreshToken);
+    }
 
-    const primaryRole: UserRole = result.user.isOrgOwner ? 'MASTER' : (result.user.roles[0]?.role ?? 'RECEPTIONIST');
+    const primaryRole: UserRole = result.user?.isOrgOwner ? 'MASTER' : (result.user?.roles[0]?.role ?? 'RECEPTIONIST');
     const u: AuthUser = {
-      id: result.user.id,
-      name: result.user.name,
-      email: result.user.email ?? email,
+      id: result.user?.id || '',
+      name: result.user?.name || '',
+      email: result.user?.email ?? email,
       role: primaryRole,
       roleLabel: ROLE_LABELS[primaryRole] || 'Staff',
-      isOrgOwner: result.user.isOrgOwner,
+      isOrgOwner: result.user?.isOrgOwner,
     };
     setUser(u);
 

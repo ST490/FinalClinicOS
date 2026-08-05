@@ -27,12 +27,6 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await login(email, password);
-      if (res && res.requires2FA) {
-        setTempToken(res.tempToken || '');
-        setShow2FA(true);
-        setLoading(false);
-        return;
-      }
       if (res && res.isInviteLogin) {
         navigate(`/accept-invite?token=${res.inviteToken}&email=${res.email}`);
         return;
