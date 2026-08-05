@@ -3,7 +3,7 @@ import { verifyAccessToken } from '../utils/jwt.service.js';
 import { AuthenticatedUser } from '../types/auth.types.js';
 import { UserRoleType } from '@prisma/client';
 import { Permission } from '../types/permissions.js';
-import { prisma } from '../../config/database.js';
+import { prisma, prismaBypass } from '../../config/database.js';
 
 export type { UserRoleType };
 export type { Permission };
@@ -163,24 +163,14 @@ export async function loadUserRoles(req: Request, res: Response, next: NextFunct
     // At this point we only know user_id and org_id (from JWT), not the clinic list
     // (that's what we're loading). The user_clinic_roles RLS policy allows rows
     // matching user_id = current_setting('app.current_user_id').
-    const user = await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_user_id', $1, false),
-                set_config('app.current_org_id', $2, false),
-                set_config('app.is_org_owner', $3, false)`,
-        userId,
-        req.user?.orgId || '',
-        req.user?.isOrgOwner ? 'true' : 'false',
-      );
-      return tx.user.findUnique({
-        where: { id: userId },
-        include: {
-          clinicRoles: {
-            where: { status: 'ACTIVE' },
-            include: { clinic: { select: { id: true, name: true } } },
-          },
+    const user = await prismaBypass.user.findUnique({
+      where: { id: userId },
+      include: {
+        clinicRoles: {
+          where: { status: 'ACTIVE' },
+          include: { clinic: { select: { id: true, name: true } } },
         },
-      });
+      },
     });
 
     if (!user) {

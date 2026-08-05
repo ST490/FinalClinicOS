@@ -26,12 +26,16 @@ declare global {
   // Prevent multiple instances during hot reload in development
   // eslint-disable-next-line no-var
   var prisma: PrismaClient | undefined;
+  // eslint-disable-next-line no-var
+  var prismaBypass: PrismaClient | undefined;
 }
 
 const datasourceUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+const bypassUrl = process.env.SUPERUSER_URL || process.env.DIRECT_URL || process.env.DATABASE_URL;
 
-function createPrismaClient(): PrismaClient {
-  if (!datasourceUrl) {
+function createPrismaClient(url?: string): PrismaClient {
+  const targetUrl = url || datasourceUrl;
+  if (!targetUrl) {
     throw new Error(
       'database.ts: neither DIRECT_URL nor DATABASE_URL is set. ' +
         'The Prisma 7 driver adapter needs a connection string.',
@@ -40,7 +44,7 @@ function createPrismaClient(): PrismaClient {
   // family:4 — pin to IPv4. The Supabase db.*.supabase.co host returns an
   // AAAA (IPv6) record and Render's outbound can't reach it (ENETUNREACH).
   // Prisma 7 PoolConfig lacks `family` but pg accepts it at runtime.
-  const pool = new Pool({ connectionString: datasourceUrl, family: 4 } as ExtendedPoolConfig);
+  const pool = new Pool({ connectionString: targetUrl, family: 4 } as ExtendedPoolConfig);
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
@@ -51,11 +55,13 @@ function createPrismaClient(): PrismaClient {
   });
 }
 
-export const prisma = global.prisma || createPrismaClient();
+export const prisma = global.prisma || createPrismaClient(datasourceUrl);
+export const prismaBypass = global.prismaBypass || createPrismaClient(bypassUrl);
 
 // In development, prevent Prisma Client from being garbage collected
 if (process.env.NODE_ENV !== 'production') {
   global.prisma = prisma;
+  global.prismaBypass = prismaBypass;
 }
 
 /**
