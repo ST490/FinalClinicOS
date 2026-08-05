@@ -51,10 +51,10 @@ export async function withTenant<T>(
   const { orgId, userId, clinics, isOrgOwner } = tenantContextFromReq(req);
   return prisma.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(
-      `SELECT set_config('app.current_org_id', $1, true),
-              set_config('app.current_user_id', $2, true),
-              set_config('app.current_clinics', $3, true),
-              set_config('app.is_org_owner', $4, true)`,
+      `SELECT set_config('app.current_org_id', $1, false),
+              set_config('app.current_user_id', $2, false),
+              set_config('app.current_clinics', $3, false),
+              set_config('app.is_org_owner', $4, false)`,
       orgId,
       userId,
       clinics.join(','),

@@ -212,9 +212,9 @@ class AuthService {
       await this.saveRefreshToken(tx, userId, refreshToken);
 
       await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_user_id', $1, true),
-                set_config('app.current_org_id', $2, true),
-                set_config('app.is_org_owner', $3, true)`,
+        `SELECT set_config('app.current_user_id', $1, false),
+                set_config('app.current_org_id', $2, false),
+                set_config('app.is_org_owner', $3, false)`,
         userId,
         invite.orgId || '',
         'false',
@@ -365,9 +365,9 @@ class AuthService {
       if (!basicUser) return null;
 
       await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_user_id', $1, true),
-                set_config('app.current_org_id', $2, true),
-                set_config('app.is_org_owner', $3, true)`,
+        `SELECT set_config('app.current_user_id', $1, false),
+                set_config('app.current_org_id', $2, false),
+                set_config('app.is_org_owner', $3, false)`,
         basicUser.id,
         basicUser.orgId || '',
         basicUser.isOrgOwner ? 'true' : 'false',

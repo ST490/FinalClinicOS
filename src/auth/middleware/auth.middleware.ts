@@ -165,9 +165,9 @@ export async function loadUserRoles(req: Request, res: Response, next: NextFunct
     // matching user_id = current_setting('app.current_user_id').
     const user = await prisma.$transaction(async (tx) => {
       await tx.$executeRawUnsafe(
-        `SELECT set_config('app.current_user_id', $1, true),
-                set_config('app.current_org_id', $2, true),
-                set_config('app.is_org_owner', $3, true)`,
+        `SELECT set_config('app.current_user_id', $1, false),
+                set_config('app.current_org_id', $2, false),
+                set_config('app.is_org_owner', $3, false)`,
         userId,
         req.user?.orgId || '',
         req.user?.isOrgOwner ? 'true' : 'false',
