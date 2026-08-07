@@ -40,6 +40,13 @@ const webhookSchema = z.object({
 function verifyTwilioWebhook(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const signature = req.headers['x-twilio-signature'] as string | undefined;
   const authToken = config.twilio.authToken;
+
+  if (process.env.NODE_ENV !== 'production' && (!authToken || !signature)) {
+    console.warn('⚠ [Webhook] Skipping Twilio signature verification in non-production environment');
+    next();
+    return;
+  }
+
   if (!authToken || !signature) {
     res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Webhook signature required' } });
     return;

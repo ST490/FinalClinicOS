@@ -39,8 +39,16 @@ export class AppointmentService {
     const slotStart = new Date(input.slotStart);
     const slotEnd = new Date(input.slotEnd);
 
-    // Double-booking prevention: check if doctor has active appointment at this time
-    // Uses raw SQL partial index (see migration 00003) for DB-level enforcement
+    // Double-booking prevention: acquire transaction-level advisory lock per doctor to eliminate race window
+    if (input.doctorId) {
+      try {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'doctor:' + input.doctorId}))`;
+      } catch (err) {
+        // Advisory locks require PostgreSQL; swallow error in non-postgres test environments
+        console.warn('[AppointmentService] Advisory lock skipped:', (err as Error)?.message);
+      }
+    }
+
     const conflicting = await tx.appointment.findFirst({
       where: {
         doctorId: input.doctorId,

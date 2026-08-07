@@ -1,6 +1,32 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
+import { getRedisClient } from '../config/redis.js';
 import { MedicineResponse, SearchMedicinesInput } from './types/medicine.types.js';
+
+async function cachedQuery<T>(cacheKey: string, ttlSeconds: number, fetcher: () => Promise<T>): Promise<T> {
+  try {
+    const redis = getRedisClient();
+    if (redis.isReady) {
+      const cached = await redis.get(cacheKey);
+      if (cached) return JSON.parse(cached) as T;
+    }
+  } catch (_) {
+    // Fail-open on Redis errors: fallback to database
+  }
+
+  const result = await fetcher();
+
+  try {
+    const redis = getRedisClient();
+    if (redis.isReady) {
+      await redis.setEx(cacheKey, ttlSeconds, JSON.stringify(result));
+    }
+  } catch (_) {
+    // Ignore Redis write errors
+  }
+
+  return result;
+}
 
 export class MedicineService {
   async search(input: SearchMedicinesInput): Promise<{ data: MedicineResponse[]; pagination: any }> {
@@ -38,18 +64,21 @@ export class MedicineService {
   }
 
   async autocomplete(country: string, query: string, limit = 10): Promise<MedicineResponse[]> {
-    const medicines = await prisma.medicineMaster.findMany({
-      where: {
-        country,
-        OR: [
-          { genericName: { startsWith: query, mode: 'insensitive' as const } },
-          { brandNames: { has: query } },
-        ],
-      },
-      take: limit,
-      orderBy: { genericName: 'asc' },
+    const cacheKey = `med:autocomplete:${country}:${query.toLowerCase().trim()}:${limit}`;
+    return cachedQuery(cacheKey, 3600, async () => {
+      const medicines = await prisma.medicineMaster.findMany({
+        where: {
+          country,
+          OR: [
+            { genericName: { startsWith: query, mode: 'insensitive' as const } },
+            { brandNames: { has: query } },
+          ],
+        },
+        take: limit,
+        orderBy: { genericName: 'asc' },
+      });
+      return medicines.map(m => this.formatMedicine(m));
     });
-    return medicines.map(m => this.formatMedicine(m));
   }
 
   async getById(id: string): Promise<MedicineResponse | null> {
@@ -58,13 +87,16 @@ export class MedicineService {
   }
 
   async getCategories(country: string): Promise<string[]> {
-    const categories = await prisma.medicineMaster.groupBy({
-      by: ['category'],
-      where: { country, category: { not: null } },
-      _count: true,
-      orderBy: { _count: { category: 'desc' } },
+    const cacheKey = `med:categories:${country}`;
+    return cachedQuery(cacheKey, 86400, async () => {
+      const categories = await prisma.medicineMaster.groupBy({
+        by: ['category'],
+        where: { country, category: { not: null } },
+        _count: true,
+        orderBy: { _count: { category: 'desc' } },
+      });
+      return categories.map(c => c.category!).filter(Boolean);
     });
-    return categories.map(c => c.category!).filter(Boolean);
   }
 
   private formatMedicine(medicine: any): MedicineResponse {

@@ -121,6 +121,11 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
 app.use(errorHandler);
 
+import { startReminderWorker } from './jobs/queue.js';
+import { reminderProcessor } from './notifications/reminder-processor.js';
+
+let reminderWorker: ReturnType<typeof startReminderWorker> | null = null;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SERVER START
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +139,18 @@ async function start() {
     // Initialize Redis (non-blocking - rate limiter will fail open if unavailable)
     getRedisClient();
 
+    // Start embedded worker unless explicitly disabled (useful for single-instance app deployments)
+    if (process.env.ENABLE_EMBEDDED_WORKER !== 'false') {
+      try {
+        reminderWorker = startReminderWorker((reminderId) =>
+          reminderProcessor.processOneReminder(reminderId)
+        );
+        console.log(`✓ Embedded BullMQ reminder worker started`);
+      } catch (err) {
+        console.warn('⚠ Could not initialize embedded worker:', (err as Error)?.message);
+      }
+    }
+
     // Start server
     app.listen(config.port, () => {
       console.log(`✓ Server running on http://localhost:${config.port}`);
@@ -146,17 +163,17 @@ async function start() {
 }
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('\nShutting down gracefully...');
+const shutdown = async (signal: string) => {
+  console.log(`\nShutting down gracefully (${signal})...`);
+  if (reminderWorker) {
+    try { await reminderWorker.close(); } catch (_) {}
+  }
   await prisma.$disconnect();
   process.exit(0);
-});
+};
 
-process.on('SIGTERM', async () => {
-  console.log('\nShutting down gracefully...');
-  await prisma.$disconnect();
-  process.exit(0);
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 start();
 

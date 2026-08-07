@@ -92,8 +92,25 @@ export const MEDICINE_DB_PROVIDER = process.env.MEDICINE_DB_PROVIDER || 'default
 export const MEDICINE_DB_COUNTRY = process.env.MEDICINE_DB_COUNTRY || 'IN'; // Default to India
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONFIG OBJECT (convenience export)
+// VALIDATION
 // ─────────────────────────────────────────────────────────────────────────────
+
+export function validateConfig(): void {
+  if (NODE_ENV === 'production') {
+    if (!JWT_SECRET || JWT_SECRET === 'development-secret-change-in-production') {
+      throw new Error('FATAL: Insecure JWT_SECRET configured in production environment.');
+    }
+    if (!SESSION_SECRET || SESSION_SECRET === 'development-session-secret') {
+      throw new Error('FATAL: Insecure SESSION_SECRET configured in production environment.');
+    }
+    if (!DATABASE_URL) {
+      throw new Error('FATAL: DATABASE_URL is missing in production environment.');
+    }
+  }
+}
+
+// Automatically validate config on load
+validateConfig();
 
 export const config = {
   port: PORT,

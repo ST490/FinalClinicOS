@@ -41,10 +41,10 @@ function createPrismaClient(url?: string): PrismaClient {
         'The Prisma 7 driver adapter needs a connection string.',
     );
   }
-  // family:4 — pin to IPv4. The Supabase db.*.supabase.co host returns an
-  // AAAA (IPv6) record and Render's outbound can't reach it (ENETUNREACH).
-  // Prisma 7 PoolConfig lacks `family` but pg accepts it at runtime.
-  const pool = new Pool({ connectionString: targetUrl, family: 4 } as ExtendedPoolConfig);
+  // family:4 — pin to IPv4 by default for cloud providers without IPv6 outbound routing.
+  // Configurable via DB_IP_FAMILY env var (e.g. set to 6 or 0 for dual-stack/IPv6).
+  const ipFamily = process.env.DB_IP_FAMILY ? parseInt(process.env.DB_IP_FAMILY, 10) : 4;
+  const pool = new Pool({ connectionString: targetUrl, family: ipFamily } as ExtendedPoolConfig);
   const adapter = new PrismaPg(pool);
   return new PrismaClient({
     adapter,
