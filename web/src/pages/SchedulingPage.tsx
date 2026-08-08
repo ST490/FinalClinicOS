@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember, type StaffSchedule } from '../lib/staff';
 import ModalPortal from '../components/ModalPortal';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import { CalendarDays, Loader2, AlertTriangle, Pencil, Plus, RefreshCw } from 'lucide-react';
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -140,10 +141,7 @@ export default function SchedulingPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading schedule…</span>
-        </div>
+        <TableSkeleton rows={5} cols={6} />
       ) : filteredStaff.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">No staff in this clinic.</div>
       ) : (

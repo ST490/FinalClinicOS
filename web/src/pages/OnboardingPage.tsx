@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, isOffboarded, type StaffMember, type StaffInvite } from '../lib/staff';
 import ModalPortal from '../components/ModalPortal';
+import { CardSkeleton } from '../components/ui/LoadingSkeleton';
 import { roleLabels, DEFAULT_DEPARTMENTS } from '../lib/constants';
 import type { UserRole } from '../types';
 import {
@@ -191,10 +192,7 @@ export default function OnboardingPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading…</span>
-        </div>
+        <CardSkeleton count={4} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Pending Invites */}

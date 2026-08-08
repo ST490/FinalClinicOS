@@ -5,6 +5,7 @@ import { attendanceApi, type AttendanceRecord } from '../lib/attendance';
 import { DEFAULT_DEPARTMENTS } from '../lib/constants';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import {
   CalendarCheck, Search, Loader2, UserPlus, LogOut, Download, AlertTriangle,
 } from 'lucide-react';
@@ -380,10 +381,7 @@ export default function AttendancePage() {
           )}
 
           {loading ? (
-            <div className="flex items-center justify-center py-20 gap-3">
-              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-              <span className="text-xs text-text-muted">Loading attendance…</span>
-            </div>
+            <TableSkeleton rows={6} cols={5} />
           ) : (
             <DataTable<AttendanceRecord> columns={todayColumns} data={filteredToday} />
           )}
@@ -391,10 +389,7 @@ export default function AttendancePage() {
       ) : (
         <div>
           {historyLoading ? (
-            <div className="flex items-center justify-center py-20 gap-3">
-              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-              <span className="text-xs text-text-muted">Searching…</span>
-            </div>
+            <TableSkeleton rows={6} cols={5} />
           ) : history.length === 0 ? (
             <div className="text-center py-16 text-sm text-text-muted">No attendance records found for this range.</div>
           ) : (

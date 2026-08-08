@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { UserRound, Banknote, CalendarCheck, CalendarOff, CalendarDays, ShieldCheck, Loader2, AlertTriangle, Send } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { CardSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 import { payrollApi, type Payslip } from '../lib/payroll';
 import { attendanceApi, type AttendanceRecord } from '../lib/attendance';
@@ -122,10 +123,7 @@ export default function MyHrPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading your HR data…</span>
-        </div>
+        <CardSkeleton count={4} />
       ) : !clinicId ? (
         <div className="text-center py-16 text-sm text-text-muted">Select a clinic to view your HR information.</div>
       ) : (

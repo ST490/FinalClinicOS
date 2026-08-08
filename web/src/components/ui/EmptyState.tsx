@@ -24,9 +24,9 @@ export default function EmptyState({ icon: Icon, message, colSpan, compact }: Em
   }
   return (
     <tr>
-      <td colSpan={colSpan} className="px-5 py-8 text-center opacity-60">
+      <td colSpan={colSpan} className="px-5 py-8 text-center opacity-60 animate-fade-in">
         <div className="flex flex-col items-center justify-center gap-1.5">
-          <Icon className="w-5 h-5 text-text-muted" />
+          <Icon className="w-5 h-5 text-text-muted animate-float" />
           <p className="text-xs text-text-secondary">{message}</p>
         </div>
       </td>

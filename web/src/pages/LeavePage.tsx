@@ -6,6 +6,7 @@ import { LEAVE_TYPES } from '../lib/constants';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import ModalPortal from '../components/ModalPortal';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import {
   CalendarOff, Search, Loader2, Plus, AlertTriangle, Check, X,
 } from 'lucide-react';
@@ -202,10 +203,7 @@ export default function LeavePage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading leave requests…</span>
-        </div>
+        <TableSkeleton rows={5} cols={5} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">No leave requests found.</div>
       ) : (

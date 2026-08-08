@@ -21,7 +21,7 @@ export default function DataTable<T extends object>({
   action,
 }: DataTableProps<T>) {
   return (
-    <div className="bg-surface-card rounded-xl border border-border overflow-hidden" style={{ boxShadow: 'var(--shadow-card)' }}>
+    <div className="bg-surface-card rounded-xl border border-border overflow-hidden animate-fade-in" style={{ boxShadow: 'var(--shadow-card)' }}>
       {(title || action) && (
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-light">
           {title && (
@@ -48,7 +48,7 @@ export default function DataTable<T extends object>({
             {data.map((item, idx) => (
               <tr
                 key={idx}
-                className="hover:bg-surface/50 transition-colors"
+                className="hover:bg-primary-50/40 dark:hover:bg-primary-50/5 transition-all duration-200 border-l-2 border-l-transparent hover:border-l-primary-500"
               >
                 {columns.map((col) => (
                   <td

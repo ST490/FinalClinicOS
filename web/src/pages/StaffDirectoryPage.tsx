@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 
 type RoleFilter = 'ALL' | string;
 type StatusFilter = 'ALL' | 'ACTIVE' | 'DISABLED' | 'PENDING';
@@ -328,10 +329,7 @@ export default function StaffDirectoryPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading directory…</span>
-        </div>
+        <TableSkeleton rows={6} cols={5} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">No staff match the current filters.</div>
       ) : (

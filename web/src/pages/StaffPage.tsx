@@ -9,6 +9,9 @@ import {
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import ModalPortal from '../components/ModalPortal';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import AnimatedModal from '../components/ui/AnimatedModal';
+import { useToast } from '../context/ToastContext';
 
 const ROLE_LABELS: Record<string, string> = {
   MASTER: 'CEO / Admin',
@@ -521,10 +524,7 @@ export default function StaffPage() {
 
       {/* Tables container */}
       {loading && staff.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading staff list...</span>
-        </div>
+        <TableSkeleton rows={6} cols={5} />
       ) : activeTab === 'active' ? (
         <DataTable<StaffMember>
           columns={staffColumns}
@@ -538,9 +538,8 @@ export default function StaffPage() {
       )}
 
       {/* Invite Modal */}
-      {isInviteModalOpen && (
-        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+      <AnimatedModal open={isInviteModalOpen} onClose={() => { setIsInviteModalOpen(false); setInviteSuccess(null); }} size="md">
+          <div className="p-6">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-primary-500" />
               Invite Staff Member
@@ -664,13 +663,11 @@ export default function StaffPage() {
               </form>
             )}
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
 
       {/* Direct Add Modal — non-clinical staff, no invite/login */}
-      {isDirectAddOpen && (
-        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+      <AnimatedModal open={isDirectAddOpen} onClose={() => setIsDirectAddOpen(false)} size="md">
+          <div className="p-6">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-500" />
               Add Staff Directly
@@ -830,13 +827,11 @@ export default function StaffPage() {
               </div>
             </form>
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
 
       {/* Offboard confirmation — must type "remove" to confirm */}
-      {deactivateTarget && (
-        <ModalPortal><div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+      <AnimatedModal open={!!deactivateTarget} onClose={() => { setDeactivateTarget(null); setDeactivateConfirm(''); }} size="sm">
+          <div className="p-6">
             <h3 className="text-lg font-bold text-text-primary mb-2 flex items-center gap-2">
               <UserMinus className="w-5 h-5 text-danger" />
               Remove Staff Member
@@ -874,8 +869,7 @@ export default function StaffPage() {
               </button>
             </div>
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
     </div>
   );
 }

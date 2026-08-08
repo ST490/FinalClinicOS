@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { CreditCard, Filter, Plus, Search, Landmark, Check, AlertCircle, TrendingUp, Receipt } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import ModalPortal from '../components/ModalPortal';
+import AnimatedModal from '../components/ui/AnimatedModal';
 import { useAuth } from '../context/AuthContext';
 import { billingApi } from '../lib/billing';
 import { patientApi } from '../lib/patients';
@@ -394,9 +395,8 @@ export default function DuesPage() {
       </div>
 
       {/* Record Invoice Modal */}
-      {isModalOpen && (
-        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
+      <AnimatedModal open={isModalOpen} onClose={() => setIsModalOpen(false)} size="md">
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Record New Invoice Entry</h3>
               <button
@@ -500,8 +500,7 @@ export default function DuesPage() {
               </div>
             </form>
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
     </div>
   );
 }

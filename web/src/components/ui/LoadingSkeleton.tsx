@@ -1,11 +1,13 @@
 /**
  * Skeleton loaders that match the Careme design system.
+ * Uses a directional shimmer gradient instead of Tailwind's animate-pulse
+ * for a more premium feel.
  */
 
 function Skeleton({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return (
     <div
-      className={`animate-pulse rounded-xl bg-border/60 ${className}`}
+      className={`skeleton-shimmer ${className}`}
       style={style}
     />
   );
@@ -83,6 +85,58 @@ export function CardSkeleton({ count = 6 }: { count?: number }) {
           <Skeleton className="h-2.5 w-3/4" />
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Skeleton for chart / recharts areas (dashboard) */
+export function ChartSkeleton({ height = 240 }: { height?: number }) {
+  return (
+    <div
+      className="bg-surface-card border border-border rounded-xl overflow-hidden"
+      style={{ boxShadow: 'var(--shadow-card)' }}
+    >
+      <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-3 w-20" />
+      </div>
+      <div className="p-5 space-y-3">
+        <div className="flex items-end gap-2" style={{ height }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton
+              key={i}
+              className="flex-1 rounded-t-lg"
+              style={{ height: `${30 + Math.random() * 60}%` }}
+            />
+          ))}
+        </div>
+        <div className="flex gap-4 justify-center">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-2.5 w-16" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton for form / settings pages */
+export function FormSkeleton({ fields = 6 }: { fields?: number }) {
+  return (
+    <div
+      className="bg-surface-card border border-border rounded-xl p-6 space-y-5"
+      style={{ boxShadow: 'var(--shadow-card)' }}
+    >
+      {Array.from({ length: fields }).map((_, i) => (
+        <div key={i} className="space-y-2">
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      ))}
+      <div className="pt-2 flex gap-3">
+        <Skeleton className="h-10 w-28 rounded-lg" />
+        <Skeleton className="h-10 w-20 rounded-lg" />
+      </div>
     </div>
   );
 }

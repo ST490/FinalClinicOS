@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Network, Loader2, AlertTriangle, Crown, Star } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { CardSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember } from '../lib/staff';
 
@@ -74,10 +75,7 @@ export default function OrgChartPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading org chart…</span>
-        </div>
+        <CardSkeleton count={6} />
       ) : byTier.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">No staff at this clinic yet.</div>
       ) : (

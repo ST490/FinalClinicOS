@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { RoleProvider } from './context/RoleContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './context/ToastContext';
 import DashboardLayout from './components/layout/DashboardLayout';
 import DashboardPage from './pages/DashboardPage';
 import PlaceholderPage from './pages/PlaceholderPage';
@@ -113,12 +114,14 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <RoleProvider>
-            <AuthenticatedApp />
-            {SHOW_DEMO_SWITCHER && <DemoSwitcherGate />}
-          </RoleProvider>
-        </BrowserRouter>
+        <ToastProvider>
+          <BrowserRouter>
+            <RoleProvider>
+              <AuthenticatedApp />
+              {SHOW_DEMO_SWITCHER && <DemoSwitcherGate />}
+            </RoleProvider>
+          </BrowserRouter>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   );

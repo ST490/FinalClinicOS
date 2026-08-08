@@ -7,6 +7,8 @@ import { statsByRole } from '../lib/constants';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
 import ModalPortal from '../components/ModalPortal';
+import AnimatedModal from '../components/ui/AnimatedModal';
+import { useToast } from '../context/ToastContext';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import type { Clinic } from '../types';
 import { Plus, ArrowRight, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -260,10 +262,8 @@ function MasterDashboard() {
       />
 
       {/* Add Clinic Modal */}
-      {isAddModalOpen && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-            <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+      <AnimatedModal open={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} size="sm">
+            <div className="p-6">
             <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
               <Plus className="w-5 h-5 text-primary-500" />
               Add New Clinic
@@ -305,22 +305,18 @@ function MasterDashboard() {
               </div>
             </form>
           </div>
-        </div>
-        </ModalPortal>
-      )}
+      </AnimatedModal>
 
       {/* Delete Branch confirmation modal — requires typing "delete" */}
-      {deleteTarget && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm pt-12 px-4 pb-12 overflow-y-auto">
-            <div className="bg-surface-card rounded-2xl border border-border p-6 w-full max-w-md shadow-2xl relative shrink-0">
+      <AnimatedModal open={!!deleteTarget} onClose={() => { setDeleteTarget(null); setDeleteConfirmText(''); setDeleteError(''); }} size="sm">
+            <div className="p-6">
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-danger" />
               <h3 className="text-lg font-bold text-text-primary">Delete Branch</h3>
             </div>
             <p className="text-sm text-text-secondary mb-2">
               This will delete{' '}
-              <span className="font-semibold text-text-primary">{deleteTarget.name}</span> and all of its
+              <span className="font-semibold text-text-primary">{deleteTarget?.name}</span> and all of its
               associated data. This action cannot be undone.
             </p>
             <p className="text-sm text-text-secondary mb-4">
@@ -357,9 +353,7 @@ function MasterDashboard() {
               </button>
             </div>
           </div>
-        </div>
-        </ModalPortal>
-      )}
+      </AnimatedModal>
     </div>
   );
 }

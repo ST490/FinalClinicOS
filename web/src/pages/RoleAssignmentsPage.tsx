@@ -8,6 +8,7 @@ import {
 import type { UserRole } from '../types';
 import { Shield, Loader2, AlertTriangle, X, Save, Users } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 
 const ASSIGNABLE_ROLES: UserRole[] = ['SUB_MASTER', 'DOCTOR', 'NURSE', 'PHARMACIST', 'RECEPTIONIST', 'HR', 'SUPPORT'];
 
@@ -142,10 +143,7 @@ export default function RoleAssignmentsPage() {
         </div>
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-20 gap-3">
-              <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-              <span className="text-xs text-text-muted">Loading…</span>
-            </div>
+            <TableSkeleton rows={5} cols={4} />
           ) : staff.length === 0 ? (
             <div className="py-16 text-center text-sm text-text-muted">No staff assigned to this clinic.</div>
           ) : (

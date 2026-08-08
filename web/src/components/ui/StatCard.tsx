@@ -56,7 +56,7 @@ export default function StatCard({ data, index = 0 }: StatCardProps) {
 
   return (
     <div
-      className={`bg-surface-card rounded-xl border border-border p-5 hover:shadow-[var(--shadow-card-hover)] transition-all duration-300 group`}
+      className={`bg-surface-card rounded-xl border border-border p-5 hover:shadow-[var(--shadow-card-hover)] transition-all duration-300 group hover-lift`}
       style={{
         boxShadow: 'var(--shadow-card)',
         animationDelay: `${index * 0.08}s`,

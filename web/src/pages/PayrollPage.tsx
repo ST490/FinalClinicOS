@@ -6,6 +6,7 @@ import { DEFAULT_DEPARTMENTS } from '../lib/constants';
 import { Banknote, Loader2, AlertTriangle, CheckCircle2, RefreshCw, Download } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import { exportExcel } from '../lib/excel';
 
 type StatusFilter = 'ALL' | 'DRAFT' | 'APPROVED' | 'PAID';
@@ -292,10 +293,7 @@ export default function PayrollPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading payroll…</span>
-        </div>
+        <TableSkeleton rows={6} cols={5} />
       ) : payslips.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">
           No payslips for {period}. Click “Generate” to build them from this month's attendance.

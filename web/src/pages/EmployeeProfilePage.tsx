@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { UserRound, Mail, Phone, Banknote, CalendarCheck, CalendarOff, ShieldCheck, FileText, Loader2, AlertTriangle } from 'lucide-react';
 import Badge from '../components/ui/Badge';
+import { FormSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember } from '../lib/staff';
 import { attendanceApi, type AttendanceSummary } from '../lib/attendance';
@@ -115,10 +116,7 @@ export default function EmployeeProfilePage() {
       {!selectedId ? (
         <div className="text-center py-16 text-sm text-text-muted">Select a staff member to view their 360 profile.</div>
       ) : loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading profile…</span>
-        </div>
+        <FormSkeleton fields={6} />
       ) : (
         <>
           {/* Profile header */}

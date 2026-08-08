@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ShieldCheck, Plus, Trash2, Loader2, AlertTriangle, CalendarClock } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import DataTable, { type Column } from '../components/ui/DataTable';
+import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember } from '../lib/staff';
 import {
@@ -326,10 +327,7 @@ export default function CredentialsPage() {
       )}
 
       {loading ? (
-        <div className="flex items-center justify-center py-20 gap-3">
-          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
-          <span className="text-xs text-text-muted">Loading credentials…</span>
-        </div>
+        <TableSkeleton rows={5} cols={5} />
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-sm text-text-muted">No credentials match the current filters.</div>
       ) : (

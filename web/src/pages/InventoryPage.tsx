@@ -3,6 +3,7 @@ import { Package, AlertTriangle, Plus, Search, Info, Pencil, Clock, Loader2 } fr
 import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
 import ModalPortal from '../components/ModalPortal';
+import AnimatedModal from '../components/ui/AnimatedModal';
 import { useAuth } from '../context/AuthContext';
 import { inventoryApi, CLINICAL_CATEGORIES, type InventoryClinicalCategory, type InventoryItem } from '../lib/inventory';
 import { useApiQuery, apiMutate } from '../lib/useApiQuery';
@@ -465,9 +466,8 @@ export default function InventoryPage() {
         </div>
 
       {/* Add Stock Item Modal */}
-      {isAddModalOpen && (
-        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
+      <AnimatedModal open={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setError(''); }} size="md">
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Add New Stock Entry</h3>
               <button
@@ -730,13 +730,11 @@ export default function InventoryPage() {
               </div>
             </form>
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
 
       {/* Edit Stock Item Modal */}
-      {editingItem && (
-        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
+      <AnimatedModal open={!!editingItem} onClose={() => setEditingItem(null)} size="md">
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Edit Stock Item</h3>
               <button
@@ -853,13 +851,11 @@ export default function InventoryPage() {
               </div>
             </form>
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
 
       {/* Stock Movement History Modal */}
-      {historyItem && (
-        <ModalPortal><div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-start justify-center pt-12 px-4 pb-12 overflow-y-auto">
-          <div className="bg-surface-card rounded-xl border border-border max-w-md w-full p-6 animate-scale-in space-y-4 shadow-xl shrink-0">
+      <AnimatedModal open={!!historyItem} onClose={() => setHistoryItem(null)} size="md">
+          <div className="p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-border-light">
               <h3 className="text-base font-bold text-text-primary">Stock Movement History</h3>
               <button
@@ -899,8 +895,7 @@ export default function InventoryPage() {
               </div>
             )}
           </div>
-        </div></ModalPortal>
-      )}
+      </AnimatedModal>
     </div>
   );
 }
