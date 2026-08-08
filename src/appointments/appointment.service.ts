@@ -226,7 +226,7 @@ export class AppointmentService {
 
   async search(input: AppointmentSearchInput, tx: Tx = defaultTx): Promise<PaginatedAppointmentsResponse> {
     const page = input.page || 1;
-    const limit = Math.min(input.limit || 20, 100);
+    const limit = Math.min(input.limit || 20, 1000);
     const skip = (page - 1) * limit;
 
     const where: Prisma.AppointmentWhereInput = {

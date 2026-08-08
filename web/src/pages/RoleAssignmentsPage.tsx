@@ -163,7 +163,7 @@ export default function RoleAssignmentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-light">
-                {staff.map((m) => {
+                {Array.isArray(staff) && staff.map((m) => {
                   const r = primaryRoleFor(m);
                   return (
                     <tr key={m.id} className="hover:bg-surface/50 transition-colors">

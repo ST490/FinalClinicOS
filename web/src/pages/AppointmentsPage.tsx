@@ -186,6 +186,7 @@ function startOfWeek(date: Date): Date {
 
 function slotKeyOf(iso: string): string {
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return '09:00';
   const mins = d.getHours() * 60 + d.getMinutes();
   const rounded = Math.floor(mins / SLOT_MIN) * SLOT_MIN;
   const h = Math.floor(rounded / 60);
@@ -239,7 +240,7 @@ export default function AppointmentsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clinic?.id, doctorScoped, user?.id, doctorFilter, categoryFilter, anchor, refetchKey]);
 
-  const { data: apptPage, loading, refetch } = useApiQuery(
+  const { data: apptPage, loading, error: apiError, refetch } = useApiQuery(
     () => appointmentApi.list(listParams),
     {
       skip: !clinic?.id,
@@ -256,11 +257,23 @@ export default function AppointmentsPage() {
     { skip: !clinic?.id },
   );
 
-  const appointments = apptPage?.data ?? [];
-  const patients = patientsPage?.data ?? [];
-  const doctors = (staff ?? []).filter((m) =>
-    m.clinicRoles?.some((r) => r.role === 'DOCTOR'),
-  );
+  const appointments = useMemo(() => {
+    const list = Array.isArray(apptPage) ? apptPage : apptPage?.data;
+    return Array.isArray(list) ? list.filter(Boolean) : [];
+  }, [apptPage]);
+
+  const patients = useMemo(() => {
+    const list = Array.isArray(patientsPage) ? patientsPage : patientsPage?.data;
+    return Array.isArray(list) ? list.filter(Boolean) : [];
+  }, [patientsPage]);
+
+  const doctors = useMemo(() => {
+    const list = Array.isArray(staff) ? staff : [];
+    return list.filter(Boolean).filter((m) =>
+      m.clinicRoles?.some((r) => r.role === 'DOCTOR'),
+    );
+  }, [staff]);
+
   const showDoctor = !doctorScoped && doctorFilter === 'ALL';
 
   // Filter the visible week by patient/doctor name (client-side on fetched data)
@@ -268,6 +281,7 @@ export default function AppointmentsPage() {
     const q = search.trim().toLowerCase();
     if (!q) return appointments;
     return appointments.filter((a) => {
+      if (!a) return false;
       const p = a.patient?.name?.toLowerCase() ?? '';
       const d = a.doctor?.name?.toLowerCase() ?? '';
       return p.includes(q) || d.includes(q);
@@ -278,6 +292,7 @@ export default function AppointmentsPage() {
   const dayCounts = useMemo(() => {
     const counts = days.map(() => 0);
     for (const a of filteredAppts) {
+      if (!a || !a.slotStart) continue;
       const k = dateKey(new Date(a.slotStart));
       const idx = days.findIndex((d) => dateKey(d) === k);
       if (idx >= 0) counts[idx]++;
@@ -296,8 +311,6 @@ export default function AppointmentsPage() {
   const refresh = () => setRefetchKey((k) => k + 1);
 
   // ── Auto-update: poll every 20s; pause while tab hidden ──
-  // ponytail: no websocket/SSE infra yet — polling keeps the board live across
-  // staff. Upgrade to SSE when realtime infra lands.
   useEffect(() => {
     const tick = () => {
       if (!document.hidden) refetch();
@@ -317,12 +330,12 @@ export default function AppointmentsPage() {
   const apptMap = useMemo(() => {
     const m: Record<string, Appointment[]> = {};
     for (const a of filteredAppts) {
-      if (!a.slotStart) continue;
+      if (!a || !a.slotStart) continue;
       const key = `${dateKey(new Date(a.slotStart))}_${slotKeyOf(a.slotStart)}`;
       (m[key] ||= []).push(a);
     }
     return m;
-  }, [appointments]);
+  }, [filteredAppts]);
 
   // ── Stats ──
   const stats = useMemo(() => {
@@ -333,16 +346,20 @@ export default function AppointmentsPage() {
       FREE_CHECKUP: 0,
     };
     for (const a of filteredAppts) {
-      byStatus[a.status] = (byStatus[a.status] || 0) + 1;
-      byCategory[a.category] = (byCategory[a.category] || 0) + 1;
+      if (!a) continue;
+      if (a.status) byStatus[a.status] = (byStatus[a.status] || 0) + 1;
+      if (a.category && byCategory[a.category] !== undefined) {
+        byCategory[a.category] = (byCategory[a.category] || 0) + 1;
+      }
     }
     const freeShownUp = appointments.filter(
       (a) =>
+        a &&
         a.category === 'FREE_CHECKUP' &&
         (a.status === 'IN_PROGRESS' || a.status === 'COMPLETED'),
     ).length;
     return { byStatus, byCategory, freeShownUp };
-  }, [appointments]);
+  }, [filteredAppts, appointments]);
 
   const walkIns = filteredAppts
     .filter(
@@ -512,10 +529,16 @@ export default function AppointmentsPage() {
             className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-4 py-2.5 rounded-lg transition-colors shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            Book Appointment
           </button>
         )}
       </div>
+
+      {apiError && (
+        <div className="p-3.5 bg-danger/10 border border-danger/20 rounded-lg text-danger text-xs flex items-center gap-2 animate-fade-in">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{apiError}</span>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">

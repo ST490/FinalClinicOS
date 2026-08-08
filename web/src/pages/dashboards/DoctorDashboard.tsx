@@ -35,19 +35,21 @@ export default function DoctorDashboard() {
   const win = last30Days();
   const { data: patients } = useApiQuery(() => reportsApi.patients(clinic?.id as string, win), { skip: !clinic?.id });
 
+  const apptList = Array.isArray(appointmentsData) ? appointmentsData : appointmentsData?.data || [];
+
   const displayStats = statsByRole.DOCTOR.map((s) => {
     if (s.id === 'stat-1') {
-      const todayCount = (appointmentsData?.data || []).length;
+      const todayCount = apptList.length;
       return { ...s, value: `Today: ${todayCount}` };
     }
     if (s.id === 'stat-2') {
       // Waitlist count
-      const waitingCount = (appointmentsData?.data || []).filter(a => a.status === 'BOOKED').length;
+      const waitingCount = apptList.filter(a => a.status === 'BOOKED').length;
       return { ...s, value: String(waitingCount) };
     }
     if (s.id === 'stat-3') {
       // Completed notes
-      const completedCount = (appointmentsData?.data || []).filter(a => a.status === 'COMPLETED').length;
+      const completedCount = apptList.filter(a => a.status === 'COMPLETED').length;
       return { ...s, value: `Complete: ${completedCount}` };
     }
     if (s.id === 'stat-4') {
@@ -57,7 +59,7 @@ export default function DoctorDashboard() {
     return s;
   });
 
-  const displayAppointments = (appointmentsData?.data || []).filter(Boolean).map((apt) => {
+  const displayAppointments = apptList.filter(Boolean).map((apt) => {
     const timeStr = new Date(apt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return {
       id: apt.id,

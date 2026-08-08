@@ -471,8 +471,9 @@ export default function PatientsPage() {
 
   // Map API patients to local Patient shape
   const PATIENTS: Patient[] = useMemo(() => {
-    if (!apiPatients?.data) return [];
-    return apiPatients.data.map((p, i) => ({
+    const list = Array.isArray(apiPatients) ? apiPatients : apiPatients?.data;
+    if (!Array.isArray(list)) return [];
+    return list.filter(Boolean).map((p, i) => ({
       id: p.id || `PAT-${i}`,
       name: p.name,
       age: p.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : 0,
