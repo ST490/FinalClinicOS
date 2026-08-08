@@ -28,10 +28,10 @@ export default function PrescriptionPrintSheet({ prescription, clinicName, logo,
     return () => document.body.classList.remove('rx-printing');
   }, []);
 
-  const patient = prescription.patient;
-  const doctor = prescription.doctor;
-  const items = prescription.items ?? [];
-  const date = new Date(prescription.createdAt).toLocaleDateString();
+  const patient = prescription?.patient;
+  const doctor = prescription?.doctor;
+  const items = prescription?.items ?? [];
+  const date = prescription?.createdAt ? new Date(prescription.createdAt).toLocaleDateString() : '';
   const contactLine = [contact?.address, contact?.phone, contact?.email].filter(Boolean).join('  ·  ');
 
   const sheet = (

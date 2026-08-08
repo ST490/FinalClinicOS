@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { staffApi, type StaffMember, type StaffSchedule } from '../lib/staff';
-import ModalPortal from '../components/ModalPortal';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import AnimatedModal from '../components/ui/AnimatedModal';
 import { CalendarDays, Loader2, AlertTriangle, Pencil, Plus, RefreshCw } from 'lucide-react';
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -161,7 +161,7 @@ export default function SchedulingPage() {
                   <td className="px-4 py-2.5 sticky left-0 bg-surface-card z-10">
                     <div className="font-medium text-text-primary">{s.name}</div>
                     <div className="text-[10px] text-text-muted">
-                      {s.clinicRoles.find((r) => r.clinicId === clinic?.id)?.department ?? s.clinicRoles[0]?.role}
+                      {s.clinicRoles?.find((r) => r.clinicId === clinic?.id)?.department ?? s.clinicRoles?.[0]?.role ?? '—'}
                     </div>
                   </td>
                   {DAYS.map((_, dow) => {
@@ -211,49 +211,45 @@ export default function SchedulingPage() {
         </div>
       )}
 
-      {editing && (
-        <ModalPortal>
-          <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-12 px-4 pb-12 overflow-y-auto" onClick={() => setEditing(null)}>
-          <div className="w-full max-w-sm bg-surface-card border border-border rounded-2xl shadow-xl p-5 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-text-primary mb-1">
-              {DAYS[editing.dayOfWeek]} shift
-            </h2>
-            <p className="text-xs text-text-secondary mb-4">{editing.userName}</p>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-text-secondary">Start</label>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-text-secondary">End</label>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
-              </div>
+      <AnimatedModal open={!!editing} onClose={() => setEditing(null)} size="sm">
+        <div className="p-5">
+          <h2 className="text-lg font-bold text-text-primary mb-1">
+            {editing && DAYS[editing.dayOfWeek]} shift
+          </h2>
+          <p className="text-xs text-text-secondary mb-4">{editing?.userName}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-text-secondary">Start</label>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
             </div>
-            <div className="mt-3">
-              <label className="text-xs font-medium text-text-secondary">Slot duration (min)</label>
-              <input type="number" min={5} step={5} value={slotDuration} onChange={(e) => setSlotDuration(Number(e.target.value) || 30)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
-            </div>
-            <div className="mt-3">
-              <label className="text-xs font-medium text-text-secondary">Shift type</label>
-              <select value={shiftType} onChange={(e) => setShiftType(e.target.value as 'DAY' | 'NIGHT' | 'ROTATIONAL' | 'OFF')} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10">
-                <option value="DAY">Day (D)</option>
-                <option value="NIGHT">Night (N)</option>
-                <option value="ROTATIONAL">Rotational (R)</option>
-                <option value="OFF">Off (O)</option>
-              </select>
-              <p className="text-[11px] text-text-muted mt-1">Off marks the shift inactive — the cell shows "O" in the grid.</p>
-            </div>
-            {editError && <div className="text-xs text-danger mt-2">{editError}</div>}
-            <div className="flex justify-end gap-2 pt-4">
-              <button type="button" onClick={() => setEditing(null)} className="text-xs font-semibold text-text-secondary border border-border hover:bg-surface px-3.5 py-2 rounded-lg cursor-pointer">Cancel</button>
-              <button type="button" onClick={saveCell} disabled={saving} className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3.5 py-2 rounded-lg cursor-pointer disabled:opacity-50">
-                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Pencil className="w-3.5 h-3.5" />} Save
-              </button>
+            <div>
+              <label className="text-xs font-medium text-text-secondary">End</label>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
             </div>
           </div>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-text-secondary">Slot duration (min)</label>
+            <input type="number" min={5} step={5} value={slotDuration} onChange={(e) => setSlotDuration(Number(e.target.value) || 30)} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10" />
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-medium text-text-secondary">Shift type</label>
+            <select value={shiftType} onChange={(e) => setShiftType(e.target.value as 'DAY' | 'NIGHT' | 'ROTATIONAL' | 'OFF')} className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-surface-card text-text-primary outline-none focus:ring-2 focus:ring-primary-500/10">
+              <option value="DAY">Day (D)</option>
+              <option value="NIGHT">Night (N)</option>
+              <option value="ROTATIONAL">Rotational (R)</option>
+              <option value="OFF">Off (O)</option>
+            </select>
+            <p className="text-[11px] text-text-muted mt-1">Off marks the shift inactive — the cell shows "O" in the grid.</p>
+          </div>
+          {editError && <div className="text-xs text-danger mt-2">{editError}</div>}
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" onClick={() => setEditing(null)} className="text-xs font-semibold text-text-secondary border border-border hover:bg-surface px-3.5 py-2 rounded-lg cursor-pointer">Cancel</button>
+            <button type="button" onClick={saveCell} disabled={saving} className="flex items-center gap-1.5 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 px-3.5 py-2 rounded-lg cursor-pointer disabled:opacity-50">
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Pencil className="w-3.5 h-3.5" />} Save
+            </button>
+          </div>
         </div>
-        </ModalPortal>
-      )}
+      </AnimatedModal>
     </div>
   );
 }

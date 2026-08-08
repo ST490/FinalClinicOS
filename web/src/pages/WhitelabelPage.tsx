@@ -71,7 +71,7 @@ export default function WhitelabelPage() {
   };
 
   const doctorCandidates = (() => {
-    const docs = staffList.filter(s => s.clinicRoles.some(r => r.clinicId === selectedClinicId && r.role === 'DOCTOR'));
+    const docs = staffList.filter(s => s.clinicRoles?.some(r => r.clinicId === selectedClinicId && r.role === 'DOCTOR'));
     return docs.length ? docs : staffList;
   })();
 

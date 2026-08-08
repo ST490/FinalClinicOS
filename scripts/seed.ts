@@ -74,36 +74,46 @@ async function main() {
 
   // ── Users + clinic roles ────────────────────────────────────────────────────
   for (const profile of ROLE_PROFILES) {
-    const user = await prisma.user.upsert({
-      where: { email: profile.email },
-      update: { status: 'ACTIVE', passwordHash, name: profile.name, isOrgOwner: profile.role === 'MASTER' },
-      create: {
-        email: profile.email,
-        phone: profile.phone,
-        name: profile.name,
-        passwordHash,
-        orgId: org.id,
-        status: 'ACTIVE',
-        isOrgOwner: profile.role === 'MASTER',
-        // Mark master seeded so 2FA enforcement doesn't lock us out of dev.
-        twoFactorEnabled: profile.role === 'MASTER' ? false : false,
-      },
-    });
-
-    // Master doesn't get a clinic role — they are org-scoped via isOrgOwner.
-    if (profile.role !== 'MASTER') {
-      await prisma.userClinicRole.upsert({
-        where: { userId_clinicId: { userId: user.id, clinicId: clinic.id } },
-        update: { status: 'ACTIVE', role: profile.role as any, isPrimary: profile.isPrimary },
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.upsert({
+        where: { email: profile.email },
+        update: { status: 'ACTIVE', passwordHash, name: profile.name, isOrgOwner: profile.role === 'MASTER' },
         create: {
-          userId: user.id,
-          clinicId: clinic.id,
-          role: profile.role as any,
-          isPrimary: profile.isPrimary,
+          email: profile.email,
+          phone: profile.phone,
+          name: profile.name,
+          passwordHash,
+          orgId: org.id,
           status: 'ACTIVE',
+          isOrgOwner: profile.role === 'MASTER',
+          twoFactorEnabled: false,
         },
       });
-    }
+
+      await tx.$executeRawUnsafe(
+        `SELECT set_config('app.current_user_id', $1, true),
+                set_config('app.current_org_id', $2, true),
+                set_config('app.is_org_owner', $3, true)`,
+        user.id,
+        org.id,
+        'true',
+      );
+
+      // Master doesn't get a clinic role — they are org-scoped via isOrgOwner.
+      if (profile.role !== 'MASTER') {
+        await tx.userClinicRole.upsert({
+          where: { userId_clinicId: { userId: user.id, clinicId: clinic.id } },
+          update: { status: 'ACTIVE', role: profile.role as any, isPrimary: profile.isPrimary },
+          create: {
+            userId: user.id,
+            clinicId: clinic.id,
+            role: profile.role as any,
+            isPrimary: profile.isPrimary,
+            status: 'ACTIVE',
+          },
+        });
+      }
+    });
   }
 
   // ── Summary ─────────────────────────────────────────────────────────────────

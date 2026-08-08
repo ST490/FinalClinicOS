@@ -52,7 +52,7 @@ export default function InventoryPage() {
   const [historyError, setHistoryError] = useState('');
 
   // Fetch from API (pharmacists are auto-scoped to PHARMA by the backend)
-  const { data: apiData } = useApiQuery(
+  const { data: apiData, loading: apiLoading, error: apiError } = useApiQuery(
     () => inventoryApi.list({
       clinicId: authClinic?.id,
       limit: 100,
@@ -63,8 +63,9 @@ export default function InventoryPage() {
 
   // Map API data to the table row shape
   const inventoryItems: InvRow[] = useMemo(() => {
-    if (!apiData?.data) return [];
-    return apiData.data.map((item) => ({
+    const list = Array.isArray(apiData) ? apiData : apiData?.data;
+    if (!Array.isArray(list)) return [];
+    return list.filter(Boolean).map((item) => ({
       id: item.id,
       name: item.customName || item.medicine?.genericName || 'Item',
       form: item.dosageForm || 'Tablets',
@@ -217,14 +218,15 @@ export default function InventoryPage() {
 
   React.useEffect(() => {
     if (editingItem) {
+      const item = editingItem as any;
       setEditForm({
-        customName: editingItem.customName || editingItem.medicine?.genericName || '',
-        dosageForm: editingItem.dosageForm || '',
-        unitPrice: String(editingItem.unitPrice ?? ''),
-        sellingPrice: editingItem.sellingPrice != null ? String(editingItem.sellingPrice) : '',
-        reorderThreshold: String(editingItem.reorderThreshold ?? ''),
-        expiryDate: editingItem.expiryDate ? editingItem.expiryDate.slice(0, 10) : '',
-        ingredients: editingItem.ingredients || '',
+        customName: item.name || item.customName || item.medicine?.genericName || '',
+        dosageForm: item.form || item.dosageForm || 'Tablets',
+        unitPrice: String(item.buyPrice ?? item.unitPrice ?? ''),
+        sellingPrice: item.sellPrice != null ? String(item.sellPrice) : item.sellingPrice != null ? String(item.sellingPrice) : '',
+        reorderThreshold: String(item.reorderPoint ?? item.reorderThreshold ?? '200'),
+        expiryDate: item.expiry && item.expiry !== 'N/A' ? item.expiry.slice(0, 10) : item.expiryDate ? item.expiryDate.slice(0, 10) : '',
+        ingredients: item.ingredients || '',
       });
     }
   }, [editingItem]);
@@ -253,14 +255,14 @@ export default function InventoryPage() {
   };
 
   // ── Stock movement history ──
-  const openHistory = async (item: InventoryItem) => {
+  const openHistory = async (item: any) => {
     setHistoryItem(item);
     setHistoryLoading(true);
     setHistoryError('');
     setHistoryData([]);
     try {
       const data = await inventoryApi.history(item.id);
-      setHistoryData(data);
+      setHistoryData(Array.isArray(data) ? data : []);
     } catch {
       setHistoryError('Failed to load stock movement history.');
     } finally {
@@ -865,14 +867,14 @@ export default function InventoryPage() {
                 ✕
               </button>
             </div>
-            <p className="text-xs text-text-secondary">{historyItem.customName || historyItem.medicine?.genericName || 'Item'}</p>
+            <p className="text-xs text-text-secondary">{(historyItem as any)?.name || (historyItem as any)?.customName || (historyItem as any)?.medicine?.genericName || 'Item'}</p>
             {historyLoading ? (
               <div className="flex items-center justify-center py-10 text-text-muted">
                 <Loader2 className="w-6 h-6 animate-spin" />
               </div>
             ) : historyError ? (
               <div className="text-xs text-danger bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">{historyError}</div>
-            ) : historyData.length === 0 ? (
+            ) : !Array.isArray(historyData) || historyData.length === 0 ? (
               <p className="text-xs text-text-secondary text-center py-8">No stock movements recorded yet.</p>
             ) : (
               <div className="max-h-[50vh] overflow-y-auto divide-y divide-border-light">

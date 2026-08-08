@@ -124,11 +124,6 @@ export class InventoryService {
       deletedAt: null,
       ...(input.clinicId && { clinicId: input.clinicId }),
       ...(input.medicineId && { medicineId: input.medicineId }),
-      // ponytail: low-stock means at/below the item's own reorderThreshold,
-      // not a hardcoded 10. Prisma can't compare two columns in `where`, so use raw.
-      ...(input.lowStock && ({
-        AND: [Prisma.raw('quantity <= reorder_threshold')],
-      } as Prisma.InventoryItemWhereInput)),
       ...(input.expiringBefore && {
         expiryDate: { lte: new Date(input.expiringBefore) },
       }),
@@ -154,11 +149,11 @@ export class InventoryService {
       ...this.scopeWhere(input.viewer),
     };
 
-    const [items, total] = await Promise.all([
+    let [items, total] = await Promise.all([
       tx.inventoryItem.findMany({
         where,
-        skip,
-        take: limit,
+        skip: input.lowStock ? undefined : skip,
+        take: input.lowStock ? undefined : limit,
         orderBy: { [input.sortBy || 'createdAt']: input.sortOrder || 'desc' },
         include: {
           medicine: { select: { id: true, genericName: true, brandNames: true, composition: true } },
@@ -167,8 +162,16 @@ export class InventoryService {
       tx.inventoryItem.count({ where }),
     ]);
 
+    let formatted = items.map(i => this.formatItem(i));
+
+    if (input.lowStock) {
+      formatted = formatted.filter(i => i.quantity <= i.reorderThreshold);
+      total = formatted.length;
+      formatted = formatted.slice(skip, skip + limit);
+    }
+
     return {
-      data: items.map(i => this.formatItem(i)),
+      data: formatted,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }

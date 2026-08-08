@@ -259,7 +259,7 @@ export default function AppointmentsPage() {
   const appointments = apptPage?.data ?? [];
   const patients = patientsPage?.data ?? [];
   const doctors = (staff ?? []).filter((m) =>
-    m.clinicRoles.some((r) => r.role === 'DOCTOR'),
+    m.clinicRoles?.some((r) => r.role === 'DOCTOR'),
   );
   const showDoctor = !doctorScoped && doctorFilter === 'ALL';
 
@@ -877,7 +877,7 @@ export default function AppointmentsPage() {
               {selectedApt.patient?.phone && (
                 <p className="text-xs text-text-secondary flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5" />
-                  {selectedApt.patient.phone}
+                  {selectedApt.patient?.phone}
                 </p>
               )}
               <p className="text-xs text-text-secondary">

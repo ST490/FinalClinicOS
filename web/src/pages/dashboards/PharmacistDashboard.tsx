@@ -55,7 +55,7 @@ export default function PharmacistDashboard() {
   });
 
   const displayPrescriptions = (prescriptionsData?.data || [])
-    .filter((rx) => rx.status === 'ACTIVE')
+    .filter((rx): rx is NonNullable<typeof rx> => Boolean(rx) && rx.status === 'ACTIVE')
     .map((rx) => ({
       id: rx.id,
       patient: rx.patient?.name || 'Unknown Patient',

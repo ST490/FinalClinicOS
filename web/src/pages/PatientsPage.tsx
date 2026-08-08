@@ -11,6 +11,7 @@ import { useApiQuery, apiMutate } from '../lib/useApiQuery';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
 import ErrorBanner from '../components/ui/ErrorBanner';
 import ModalPortal from '../components/ModalPortal';
+import AnimatedModal from '../components/ui/AnimatedModal';
 
 // ─── Types ───────────────────────────────────────────────
 type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-';
@@ -348,10 +349,9 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
   };
 
   return (
-    <ModalPortal>
-      <div className="fixed inset-0 z-50 flex items-start justify-center pt-12 px-4 pb-12 bg-black/50 backdrop-blur-sm overflow-y-auto">
-      <div className="bg-surface-card rounded-2xl border border-border shadow-2xl w-full max-w-lg shrink-0">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+    <AnimatedModal open={true} onClose={onClose} size="lg">
+      <div className="p-6">
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-border">
           <div>
             <h3 className="font-bold text-text-primary text-base">Register New Patient</h3>
             <p className="text-xs text-text-muted mt-0.5">Fill in basic patient information to create a record</p>
@@ -362,12 +362,13 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
         </div>
 
         {error && (
-          <div className="mx-6 mt-4 flex items-center gap-2 p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
-            <AlertTriangle className="w-4 h-4 shrink-0" />{error}
+          <div className="mb-4 flex items-center gap-2 p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
         )}
 
-        <div className="p-6 space-y-4">
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
               <label className="text-xs font-semibold text-text-muted uppercase tracking-wide block mb-1.5">Full Name *</label>
@@ -442,8 +443,7 @@ function AddPatientModal({ onClose, onCreated }: { onClose: () => void; onCreate
           </button>
         </div>
       </div>
-    </div>
-    </ModalPortal>
+    </AnimatedModal>
   );
 }
 

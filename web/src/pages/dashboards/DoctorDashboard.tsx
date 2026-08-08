@@ -57,7 +57,7 @@ export default function DoctorDashboard() {
     return s;
   });
 
-  const displayAppointments = (appointmentsData?.data || []).map((apt) => {
+  const displayAppointments = (appointmentsData?.data || []).filter(Boolean).map((apt) => {
     const timeStr = new Date(apt.slotStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     return {
       id: apt.id,

@@ -79,7 +79,7 @@ export default function ReceptionistDashboard() {
     'General Consultation'
   ]));
 
-  const displayDues = (duesData?.data || []).map(due => ({
+  const displayDues = (duesData?.data || []).filter(Boolean).map(due => ({
     id: due.id,
     patient: due.patientName || 'Patient',
     date: due.createdAt?.split('T')[0] || '',
@@ -88,8 +88,8 @@ export default function ReceptionistDashboard() {
     status: due.status,
   }));
 
-  const waitingCount = (appointmentsData?.data || []).filter(a => a.status === 'BOOKED').length;
-  const checkedInCount = (appointmentsData?.data || []).filter(a => a.status === 'CONFIRMED' || a.status === 'IN_PROGRESS').length;
+  const waitingCount = (appointmentsData?.data || []).filter(a => a?.status === 'BOOKED').length;
+  const checkedInCount = (appointmentsData?.data || []).filter(a => a?.status === 'CONFIRMED' || a?.status === 'IN_PROGRESS').length;
   const expectedCount = (appointmentsData?.data || []).length;
 
   const displayStats = statsByRole.RECEPTIONIST.map((s) => {
@@ -109,6 +109,7 @@ export default function ReceptionistDashboard() {
   });
 
   const displayWaitlist = (appointmentsData?.data || [])
+    .filter(Boolean)
     .filter(a => a.status === 'BOOKED')
     .map(a => ({
       id: a.id,

@@ -287,7 +287,7 @@ export default function StaffPage() {
         if (!clinic?.id && item.clinicRoles?.length) {
           return (
             <div className="space-y-1">
-              {item.clinicRoles.map((r) => (
+              {item.clinicRoles?.map((r) => (
                 <div key={r.id} className="flex items-center gap-1.5">
                   <Badge variant={ROLE_COLORS[r.role] || 'neutral'}>
                     {/* Support staff show their department, not "Support Staff". */}

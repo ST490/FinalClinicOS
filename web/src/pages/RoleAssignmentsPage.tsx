@@ -9,6 +9,7 @@ import type { UserRole } from '../types';
 import { Shield, Loader2, AlertTriangle, X, Save, Users } from 'lucide-react';
 import Badge from '../components/ui/Badge';
 import { TableSkeleton } from '../components/ui/LoadingSkeleton';
+import AnimatedModal from '../components/ui/AnimatedModal';
 
 const ASSIGNABLE_ROLES: UserRole[] = ['SUB_MASTER', 'DOCTOR', 'NURSE', 'PHARMACIST', 'RECEPTIONIST', 'HR', 'SUPPORT'];
 
@@ -208,16 +209,16 @@ export default function RoleAssignmentsPage() {
       </div>
 
       {/* Edit modal */}
-      {edit && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-12 px-4 pb-12 overflow-y-auto" onClick={() => setEdit(null)}>
-          <div className="bg-surface-card w-full max-w-md rounded-2xl border border-border p-6 shadow-xl shrink-0" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-text-primary">Edit Role — {edit.member.name}</h3>
-              <button onClick={() => setEdit(null)} className="text-text-muted hover:text-text-primary cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <AnimatedModal open={!!edit} onClose={() => setEdit(null)} size="md">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-text-primary">Edit Role — {edit?.member.name}</h3>
+            <button onClick={() => setEdit(null)} className="text-text-muted hover:text-text-primary cursor-pointer">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
+          {edit && (
             <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               <div>
                 <label className="text-xs font-semibold text-text-secondary uppercase tracking-wider block mb-1">Role</label>
@@ -353,9 +354,9 @@ export default function RoleAssignmentsPage() {
                 </button>
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </AnimatedModal>
     </div>
   );
 }

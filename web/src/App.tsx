@@ -97,6 +97,7 @@ function AuthenticatedApp() {
         <Route path="/hr-reports" element={<HrReportsPage />} />
         <Route path="/credentials" element={<CredentialsPage />} />
         <Route path="/my-hr" element={<MyHrPage />} />
+        <Route path="/employee" element={<StaffDirectoryPage />} />
         <Route path="/employee/:userId" element={<EmployeeProfilePage />} />
         <Route path="/org-chart" element={<OrgChartPage />} />
         <Route path="*" element={<PlaceholderPage />} />
